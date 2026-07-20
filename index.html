@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISA Performance Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#181f30; --panel2:#1f2740; --line:#2b3450;
+    --text:#e9edf6; --muted:#93a0bd; --accent:#4f8cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1280px;margin:0 auto;padding:22px 20px 70px}
+  header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
+  h1{font-size:22px;margin:0}
+  .sub{color:var(--muted);font-size:13px}
+  select,button,input{font-family:inherit}
+  .period{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  select.periodSel{background:var(--panel);color:var(--text);border:1px solid var(--line);
+    border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600}
+  .tabs{display:flex;gap:6px;margin:18px 0 20px;flex-wrap:wrap}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:8px 16px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:600;transition:.15s}
+  .tab:hover{color:var(--text)}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .grid{display:grid;gap:14px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 17px}
+  .card .label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .card .value{font-size:26px;font-weight:700;margin-top:6px}
+  .card .delta{font-size:12px;margin-top:5px;font-weight:600}
+  .up{color:var(--good)} .down{color:var(--bad)} .flat{color:var(--muted)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:18px}
+  .panel h2{font-size:15px;margin:0 0 14px}
+  .panel h2 .hint{color:var(--muted);font-weight:400;font-size:12px;margin-left:8px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:860px){.two{grid-template-columns:1fr}}
+  .funnel-row{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+  .funnel-bar{position:relative;flex:1;background:var(--panel2);border-radius:8px;height:36px;overflow:hidden}
+  .funnel-fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--accent),#7aa8ff);
+    display:flex;align-items:center;padding-left:12px;font-weight:700;font-size:13px;color:#fff;border-radius:8px;min-width:48px}
+  .funnel-name{width:118px;font-size:13px;color:var(--muted);text-align:right}
+  .conv{width:92px;font-size:12px;color:var(--muted)}
+  .conv b{color:var(--text)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .pill.g{background:rgba(34,197,94,.15);color:#4ade80}
+  .pill.y{background:rgba(245,158,11,.15);color:#fbbf24}
+  .pill.r{background:rgba(239,68,68,.15);color:#f87171}
+  .track{background:var(--panel2);border-radius:999px;height:12px;position:relative;overflow:hidden;margin-top:3px}
+  .track .fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px}
+  .track .goalmark{position:absolute;top:-3px;bottom:-3px;width:2px;background:#fff;opacity:.7}
+  .chartbox{position:relative;height:260px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .goaledit{display:grid;grid-template-columns:1fr 96px;gap:8px 12px;align-items:center;margin-bottom:2px}
+  .goaledit label{font-size:13px;color:var(--muted)}
+  .goaledit input{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:6px 8px;font-size:13px;width:100%;text-align:right}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:8px 14px;
+    font-size:13px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  .row-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .coach{border-left:3px solid var(--accent);background:var(--panel2);border-radius:10px;
+    padding:12px 14px;margin-bottom:10px;font-size:13.5px;line-height:1.5}
+  .coach .impact{color:var(--good);font-weight:700}
+  .coach .big{font-size:14px;font-weight:700;margin-bottom:2px}
+  .coach.top{border-left-color:var(--good)}
+  footer{color:var(--muted);font-size:12px;margin-top:26px;text-align:center;line-height:1.7}
+  .banner{background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.35);color:#bcd2ff;
+    padding:10px 14px;border-radius:12px;font-size:13px;margin:14px 0 0}
+  .hide{display:none}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--good);
+    color:#062611;padding:10px 18px;border-radius:10px;font-weight:700;font-size:13px;opacity:0;
+    transition:.25s;pointer-events:none}
+  .toast.show{opacity:1}
+  #lock{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+  #lock .box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:32px 30px;width:340px;text-align:center}
+  #lock h2{margin:0 0 6px;font-size:18px}
+  #lock p{color:var(--muted);font-size:13px;margin:0 0 18px}
+  #lock input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:11px 12px;font-size:15px;text-align:center;margin-bottom:12px}
+  #lock button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:700;cursor:pointer}
+  #lock .err{color:var(--bad);font-size:12px;height:16px;margin-bottom:6px}
+  body.locked .wrap{display:none}
+</style>
+</head>
+<body class="locked">
+<div id="lock"><div class="box">
+  <h2>Team Tracker</h2>
+  <p>Enter the team passcode to view.</p>
+  <div class="err" id="lockErr"></div>
+  <input type="password" id="lockInput" placeholder="Passcode" autocomplete="off">
+  <button id="lockBtn">Unlock</button>
+</div></div>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>ISA Performance Tracker</h1>
+      <div class="sub" id="rangeLabel"></div>
+    </div>
+    <div class="period">
+      <span class="sub">Period</span>
+      <select class="periodSel" id="periodSel">
+        <option value="week">This Week</option>
+        <option value="mtd" selected>Month to Date</option>
+        <option value="ytd">Year to Date</option>
+        <option value="last30">Last 30 Days</option>
+        <option value="last90">Last 90 Days</option>
+        <option value="lastyear">Last Year (full)</option>
+        <option value="all">All Time</option>
+      </select>
+      <span class="sub" id="asOf"></span>
+    </div>
+  </header>
+
+  <div class="banner" id="sampleBanner">⚠️ <b>Sample data</b> — design prototype. Figures are simulated until we connect live data (deals/volume/GCI from SISU; ISA activity, lead stages &amp; attribution tags from Follow Up Boss). Growth vs. the prior equivalent period is shown next to each headline metric.</div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+
+  <footer>
+    ISA Performance Tracker · source: Follow Up Boss · regenerated weekly<br>
+    Conversion ratios computed stage-to-stage. ISA team pool = 5% of GCI; closer 2.5% + manager (Kahla) 2.5% override; Kahla keeps 5% on her own deals. Coaching impacts are annualized estimates from trailing conversion rates.
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================================
+   CONFIG  —  Claude edits `comp`, `defaultGoals`, and (for real data) `weeks`.
+   ========================================================================== */
+const CONFIG = {
+  asOf: "2026-07-20",       // reporting "today"; drives all period math
+  sample: true,
+  comp: {
+    teamTakeOfGci: 0.05,   // the ISA team keeps 5% of total GCI; 95% goes to agents/brokerage
+    closerShare: 0.025,    // the closing ISA keeps 2.5% of their own deal's GCI
+    managerShare: 0.025,   // ISA-manager override: 2.5% of GCI on the OTHER ISAs' deals
+    manager: "Kahla",      // ISA manager — earns 5% on her own deals + 2.5% override on others'
+  },
+  // Default goals applied to every ISA unless overridden (edited in-page & saved).
+  defaultGoals: {
+    contactRate: 0.65, newToApptSet: 0.15, apptSetToMet: 0.75,
+    metToContract: 0.30, contractToClose: 0.85, leadToClose: 0.03,
+    callsPerDay: 60, apptsSetPerWeek: 6, closingsPerMonth: 4
+  },
+  isaTags: { Jennifer:"Jennifer - Converted", Kahla:"Kahla - Converted", Sheryl:"Sheryl - Converted" }
+};
+const ISA_NAMES = ["Jennifer","Kahla","Sheryl"];
+const ISA_HEX = { Jennifer:"#4f8cff", Kahla:"#a855f7", Sheryl:"#22c55e" };
+
+/* ============================================================================
+   SAMPLE DATA GENERATOR
+   Produces DATA.weeks = [{start:"YYYY-MM-DD", isas:{Name:{activity,funnel,appts,deals}}}]
+   For live data, Claude REPLACES this generator with a literal `weeks` array
+   built from Follow Up Boss (same shape). Consuming code never changes.
+   ========================================================================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function buildSampleWeeks(){
+  const profiles={
+    Jennifer:{calls:300,contactRate:.63,leadToSet:.15,setToMet:.75,metToUc:.30,ucToClose:.82,avgGci:10800,trend:.0035},
+    Kahla:   {calls:255,contactRate:.55,leadToSet:.12,setToMet:.70,metToUc:.26,ucToClose:.78,avgGci:9600, trend:.0028},
+    Sheryl:  {calls:340,contactRate:.71,leadToSet:.17,setToMet:.80,metToUc:.33,ucToClose:.86,avgGci:11200,trend:.0042}
+  };
+  const weeks=[];
+  const start=new Date(Date.UTC(2025,0,6));        // Mon Jan 6 2025
+  const end=new Date(Date.UTC(2026,6,20));         // Mon Jul 20 2026 (current week)
+  let idx=0;
+  for(let d=new Date(start); d<=end; d.setUTCDate(d.getUTCDate()+7)){
+    const iso=d.toISOString().slice(0,10);
+    const rec={start:iso,isas:{}};
+    ISA_NAMES.forEach((name,ni)=>{
+      const p=profiles[name], rnd=mulberry32(1000*ni+idx*7+1);
+      const g=1+p.trend*idx;                        // upward trend over time
+      const noise=()=>0.85+rnd()*0.30;              // ±15%
+      const calls=Math.round(p.calls*g*noise());
+      const contacts=Math.round(calls*(0.33+rnd()*0.06));
+      const newLeads=Math.round(calls*(0.55+rnd()*0.08));
+      const contacted=Math.round(newLeads*p.contactRate*g*noise()*0.5+contacts*0.5);
+      const apptSet=Math.max(0,Math.round(newLeads*p.leadToSet*g*noise()));
+      const met=Math.max(0,Math.round(apptSet*p.setToMet*noise()));
+      const noShow=Math.max(0,apptSet-met);
+      const underContract=Math.max(0,Math.round(met*p.metToUc*noise()));
+      const closed=Math.max(0,Math.round(underContract*p.ucToClose*noise()));
+      const gci=Math.round(closed*p.avgGci*(0.9+rnd()*0.2));
+      rec.isas[name]={
+        activity:{calls,talkMin:Math.round(calls*2.1*noise()),texts:Math.round(calls*0.7),
+          emails:Math.round(calls*0.3),contacts},
+        funnel:{newLeads,contacted:Math.min(contacted,newLeads),
+          nurture:Math.round(contacted*0.4),hot:Math.round(apptSet*0.9),apptSet},
+        appts:{set:apptSet,met,noShow},
+        deals:{underContract,closed,volume:Math.round(gci/0.025),gci}
+      };
+    });
+    // Whole-office totals (SISU): the ISA department is a subset. ISA share of the
+    // office rises from ~30% to ~42% over time to illustrate growth analytics.
+    let isC=0,isV=0,isG=0,isUC=0,isSet=0,isMet=0;
+    ISA_NAMES.forEach(n=>{const dd=rec.isas[n];isC+=dd.deals.closed;isV+=dd.deals.volume;
+      isG+=dd.deals.gci;isUC+=dd.deals.underContract;isSet+=dd.appts.set;isMet+=dd.appts.met;});
+    const share=Math.min(0.55,0.30+0.12*(idx/80)+(mulberry32(999+idx*3)()-0.5)*0.06);
+    const inv=1/Math.max(0.2,share);
+    rec.team={
+      deals:{underContract:Math.round(isUC*inv),closed:Math.round(isC*inv),
+        volume:Math.round(isV*inv),gci:Math.round(isG*inv)},
+      appts:{set:Math.round(isSet*inv),met:Math.round(isMet*inv)}
+    };
+    weeks.push(rec); idx++;
+  }
+  return weeks;
+}
+const DATA = { weeks: buildSampleWeeks() };
+
+/* ============================ date + period math ============================ */
+const ASOF = new Date(CONFIG.asOf+"T00:00:00Z");
+function d(str){return new Date(str+"T00:00:00Z");}
+function addDays(dt,n){const x=new Date(dt);x.setUTCDate(x.getUTCDate()+n);return x;}
+function monthStart(dt){return new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth(),1));}
+function yearStart(dt){return new Date(Date.UTC(dt.getUTCFullYear(),0,1));}
+function weekStartMon(dt){const x=new Date(dt);const day=(x.getUTCDay()+6)%7;return addDays(x,-day);}
+function fmtDate(dt){return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",timeZone:"UTC"});}
+
+function periodRange(id){
+  const now=ASOF;
+  let start,end=now,prevStart,prevEnd,label;
+  if(id==="week"){ start=weekStartMon(now); label="This week";
+    prevEnd=addDays(start,-1); prevStart=addDays(prevEnd,-6); }
+  else if(id==="mtd"){ start=monthStart(now); label="Month to date";
+    const days=Math.round((now-start)/864e5);
+    const pm=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-1,1));
+    prevStart=pm; prevEnd=addDays(pm,days); }
+  else if(id==="ytd"){ start=yearStart(now); label="Year to date";
+    prevStart=new Date(Date.UTC(now.getUTCFullYear()-1,0,1));
+    prevEnd=new Date(Date.UTC(now.getUTCFullYear()-1,now.getUTCMonth(),now.getUTCDate())); }
+  else if(id==="last30"){ start=addDays(now,-29); label="Last 30 days";
+    prevEnd=addDays(start,-1); prevStart=addDays(prevEnd,-29); }
+  else if(id==="last90"){ start=addDays(now,-89); label="Last 90 days";
+    prevEnd=addDays(start,-1); prevStart=addDays(prevEnd,-89); }
+  else if(id==="lastyear"){ const y=now.getUTCFullYear()-1;
+    start=new Date(Date.UTC(y,0,1)); end=new Date(Date.UTC(y,11,31)); label=y+" (full year)";
+    prevStart=new Date(Date.UTC(y-1,0,1)); prevEnd=new Date(Date.UTC(y-1,11,31)); }
+  else { start=d(DATA.weeks[0].start); label="All time"; prevStart=null; prevEnd=null; }
+  return {start,end,prevStart,prevEnd,label};
+}
+
+function blank(){return{activity:{calls:0,talkMin:0,texts:0,emails:0,contacts:0},
+  funnel:{newLeads:0,contacted:0,nurture:0,hot:0,apptSet:0},
+  appts:{set:0,met:0,noShow:0},deals:{underContract:0,closed:0,volume:0,gci:0}};}
+function addInto(t,s){for(const grp in t)for(const k in t[grp])t[grp][k]+=s[grp][k];}
+
+function aggregate(name,start,end){
+  const t=blank(); if(!start)return t;
+  DATA.weeks.forEach(w=>{const ws=d(w.start);
+    if(ws>=start&&ws<=end){ if(name==="Team")ISA_NAMES.forEach(n=>addInto(t,w.isas[n]));
+      else addInto(t,w.isas[name]); }});
+  return t;
+}
+function officeAgg(start,end){
+  const t={deals:{underContract:0,closed:0,volume:0,gci:0},appts:{set:0,met:0}};
+  if(!start)return t;
+  DATA.weeks.forEach(w=>{const ws=d(w.start);if(ws>=start&&ws<=end){
+    for(const k in t.deals)t.deals[k]+=w.team.deals[k];
+    for(const k in t.appts)t.appts[k]+=w.team.appts[k];}});
+  return t;
+}
+function weeksInRange(name,start,end){
+  return DATA.weeks.filter(w=>{const ws=d(w.start);return ws>=start&&ws<=end;})
+    .map(w=>({start:w.start, data: name==="Team"
+      ? (()=>{const t=blank();ISA_NAMES.forEach(n=>addInto(t,w.isas[n]));return t;})()
+      : w.isas[name]}));
+}
+
+/* ============================ derived ============================ */
+const fmt=n=>Math.round(n).toLocaleString("en-US");
+const money=n=>"$"+Math.round(n).toLocaleString("en-US");
+const pct=n=>(n*100).toFixed(1)+"%";
+const safe=(a,b)=>b>0?a/b:0;
+function ratios(x){return{
+  contactRate:safe(x.funnel.contacted,x.funnel.newLeads),
+  newToApptSet:safe(x.appts.set,x.funnel.newLeads),
+  apptSetToMet:safe(x.appts.met,x.appts.set),
+  metToContract:safe(x.deals.underContract,x.appts.met),
+  contractToClose:safe(x.deals.closed,x.deals.underContract),
+  leadToClose:safe(x.deals.closed,x.funnel.newLeads)};}
+// Per-ISA income for a period. Manager (Kahla) earns closer+manager share on her own
+// deals (=5%) plus a 2.5% override on every other ISA's GCI; the others earn 2.5%.
+function incomeByISA(start,end){
+  const gci={}; let total=0;
+  ISA_NAMES.forEach(n=>{gci[n]=aggregate(n,start,end).deals.gci; total+=gci[n];});
+  const inc={};
+  ISA_NAMES.forEach(n=>{
+    if(n===CONFIG.comp.manager)
+      inc[n]=(CONFIG.comp.closerShare+CONFIG.comp.managerShare)*gci[n]
+             +CONFIG.comp.managerShare*(total-gci[n]);
+    else inc[n]=CONFIG.comp.closerShare*gci[n];
+  });
+  return {gci,total,inc,teamPool:CONFIG.comp.teamTakeOfGci*total,
+    brokerage:(1-CONFIG.comp.teamTakeOfGci)*total};
+}
+const shareForClose=name=> name===CONFIG.comp.manager
+  ? CONFIG.comp.closerShare+CONFIG.comp.managerShare : CONFIG.comp.closerShare;
+function trailingWindow(nWeeks){const ws=DATA.weeks.filter(w=>d(w.start)<=ASOF).slice(-nWeeks);
+  return {start:ws.length?d(ws[0].start):ASOF,end:ASOF,nWeeks:ws.length};}
+function growth(cur,prev){if(!prev||prev===0)return null;return (cur-prev)/Math.abs(prev);}
+function deltaHTML(g){if(g===null)return `<div class="delta flat">—</div>`;
+  const cls=g>0?"up":g<0?"down":"flat";const arw=g>0?"▲":g<0?"▼":"■";
+  return `<div class="delta ${cls}">${arw} ${(Math.abs(g)*100).toFixed(1)}% vs prev</div>`;}
+
+/* ============================ goals (editable + persisted) ============================ */
+const GKEY="isaTrackerGoals.v1";
+function loadGoals(){try{return JSON.parse(localStorage.getItem(GKEY))||{};}catch(e){return{};}}
+function goalsFor(name){const saved=loadGoals()[name]||{};return{...CONFIG.defaultGoals,...saved};}
+function saveGoals(name,obj){const all=loadGoals();all[name]={...(all[name]||{}),...obj};
+  localStorage.setItem(GKEY,JSON.stringify(all));}
+
+/* ============================ coaching engine ============================ */
+function trailing(name,nWeeks){
+  const all=DATA.weeks.filter(w=>d(w.start)<=ASOF).slice(-nWeeks);
+  const t=blank(); all.forEach(w=>{if(name==="Team")ISA_NAMES.forEach(n=>addInto(t,w.isas[n]));
+    else addInto(t,w.isas[name]);});
+  return {sum:t, nWeeks:all.length};
+}
+function coaching(name){
+  const {sum,nWeeks}=trailing(name,8); if(nWeeks===0)return [];
+  const g=goalsFor(name), share=shareForClose(name);
+  const avgGci=safe(sum.deals.gci,sum.deals.closed);
+  const WPY=50; // working weeks/yr
+  const tw=trailingWindow(8), incNow=incomeByISA(tw.start,tw.end);
+  const annualIncomeNow=(incNow.inc[name]/Math.max(1,nWeeks))*WPY;
+  // chained downstream rates from met onward
+  const setToMet=safe(sum.appts.met,sum.appts.set);
+  const metToUc=safe(sum.deals.underContract,sum.appts.met);
+  const ucToClose=safe(sum.deals.closed,sum.deals.underContract);
+  const setToClose=setToMet*metToUc*ucToClose;
+  const contactedToSet=safe(sum.appts.set,sum.funnel.contacted);
+  const closePerCall=safe(sum.deals.closed,sum.activity.calls);
+  const callsPerWeek=sum.activity.calls/nWeeks;
+  const incPerClose=avgGci*share;
+  const suggestions=[];
+
+  // 1) more daily calls
+  const addCalls=5; const extraCallsYr=addCalls*5*WPY;
+  const c1=extraCallsYr*closePerCall; const inc1=c1*incPerClose;
+  suggestions.push({lever:`Increase daily calls by ${addCalls}`,
+    detail:`~${fmt(addCalls*5)} more calls/week. At your current close-per-call rate that's about <b>${c1.toFixed(1)} more closings/yr</b>.`,
+    income:inc1, pctInc: annualIncomeNow>0?inc1/annualIncomeNow:0});
+
+  // 2) lift contact rate to goal
+  const curCR=safe(sum.funnel.contacted,sum.funnel.newLeads);
+  if(g.contactRate>curCR){
+    const extraContactedWk=(g.contactRate-curCR)*(sum.funnel.newLeads/nWeeks);
+    const c2=extraContactedWk*contactedToSet*setToClose*WPY;
+    const inc2=c2*incPerClose;
+    suggestions.push({lever:`Raise contact rate to ${pct(g.contactRate)}`,
+      detail:`Currently ${pct(curCR)}. Reaching more of your new leads yields about <b>${c2.toFixed(1)} more closings/yr</b>.`,
+      income:inc2, pctInc:annualIncomeNow>0?inc2/annualIncomeNow:0});
+  }
+  // 3) reduce no-shows (raise set->met to goal)
+  if(g.apptSetToMet>setToMet){
+    const extraMetWk=(g.apptSetToMet-setToMet)*(sum.appts.set/nWeeks);
+    const c3=extraMetWk*metToUc*ucToClose*WPY; const inc3=c3*incPerClose;
+    suggestions.push({lever:`Cut no-shows: lift appt-set→met to ${pct(g.apptSetToMet)}`,
+      detail:`Currently ${pct(setToMet)}. Confirmation calls/reminders to hold more appointments add about <b>${c3.toFixed(1)} closings/yr</b>.`,
+      income:inc3, pctInc:annualIncomeNow>0?inc3/annualIncomeNow:0});
+  }
+  // 4) improve met->under contract to goal
+  if(g.metToContract>metToUc){
+    const extraUcWk=(g.metToContract-metToUc)*(sum.appts.met/nWeeks);
+    const c4=extraUcWk*ucToClose*WPY; const inc4=c4*incPerClose;
+    suggestions.push({lever:`Improve met→under-contract to ${pct(g.metToContract)}`,
+      detail:`Currently ${pct(metToUc)}. Stronger consults/needs analysis at appointments add about <b>${c4.toFixed(1)} closings/yr</b>.`,
+      income:inc4, pctInc:annualIncomeNow>0?inc4/annualIncomeNow:0});
+  }
+  return suggestions.filter(s=>s.income>0).sort((a,b)=>b.income-a.income);
+}
+
+/* ============================ shared UI builders ============================ */
+function cardsHTML(items){return `<div class="grid cards">`+items.map(c=>`
+  <div class="card"><div class="label">${c.label}</div>
+    <div class="value">${c.value}</div>${c.delta||(c.sub?`<div class="delta flat">${c.sub}</div>`:'')}</div>`).join("")+`</div>`;}
+
+function funnelHTML(x){
+  const stages=[["New leads",x.funnel.newLeads],["Contacted",x.funnel.contacted],
+    ["Appt set",x.appts.set],["Appt met",x.appts.met],
+    ["Under contract",x.deals.underContract],["Closed",x.deals.closed]];
+  const max=stages[0][1]||1; let h="";
+  stages.forEach(([n,v],i)=>{const w=Math.max(5,(v/max)*100);
+    const conv=i>0?`<div class="conv"><b>${pct(safe(v,stages[i-1][1]))}</b> of prev</div>`:`<div class="conv">&nbsp;</div>`;
+    h+=`<div class="funnel-row"><div class="funnel-name">${n}</div>
+      <div class="funnel-bar"><div class="funnel-fill" style="width:${w}%">${fmt(v)}</div></div>${conv}</div>`;});
+  return h;
+}
+const RATIO_META=[["contactRate","Contact rate","Contacted ÷ New"],
+  ["newToApptSet","Lead → Appt set","Set ÷ New"],["apptSetToMet","Appt set → Met","Met ÷ Set"],
+  ["metToContract","Met → Under contract","U/C ÷ Met"],["contractToClose","U/C → Closed","Closed ÷ U/C"],
+  ["leadToClose","Lead → Close (overall)","Closed ÷ New"]];
+function ratiosTableHTML(x,goals){
+  const r=ratios(x);
+  const rows=RATIO_META.map(([k,label,def])=>{const v=r[k],goal=goals[k],gap=v-goal;
+    const cls=goal>0?(v>=goal?"g":v>=goal*0.8?"y":"r"):"y";
+    return `<tr><td>${label}<div class="sub" style="font-size:11px">${def}</div></td>
+      <td class="num"><span class="pill ${cls}">${pct(v)}</span></td>
+      <td class="num">${pct(goal)}</td>
+      <td class="num ${gap>=0?'up':'down'}">${gap>=0?'+':''}${(gap*100).toFixed(1)} pt</td></tr>`;}).join("");
+  return `<table><thead><tr><th>Conversion</th><th class="num">Actual</th><th class="num">Goal</th><th class="num">Gap</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ============================ views ============================ */
+let charts=[]; const clearCharts=()=>{charts.forEach(c=>c.destroy());charts=[];};
+const gridColor="rgba(147,160,189,.12)", tickColor="#93a0bd";
+
+function headlineCards(cur,prev){
+  const rc=ratios(cur), rp=ratios(prev);
+  return cardsHTML([
+    {label:"New leads",value:fmt(cur.funnel.newLeads),delta:deltaHTML(growth(cur.funnel.newLeads,prev.funnel.newLeads))},
+    {label:"Appts set",value:fmt(cur.appts.set),delta:deltaHTML(growth(cur.appts.set,prev.appts.set))},
+    {label:"Appts met",value:fmt(cur.appts.met),delta:deltaHTML(growth(cur.appts.met,prev.appts.met))},
+    {label:"Closings",value:fmt(cur.deals.closed),delta:deltaHTML(growth(cur.deals.closed,prev.deals.closed))},
+    {label:"Closed GCI",value:money(cur.deals.gci),delta:deltaHTML(growth(cur.deals.gci,prev.deals.gci))},
+    {label:"Contact rate",value:pct(rc.contactRate),delta:deltaHTML(growth(rc.contactRate,rp.contactRate))},
+  ]);
+}
+
+function renderTeam(pr){
+  const cur=aggregate("Team",pr.start,pr.end), prev=aggregate("Team",pr.prevStart,pr.prevEnd);
+  const teamGoals=CONFIG.defaultGoals;
+  const inc=incomeByISA(pr.start,pr.end), incPrev=incomeByISA(pr.prevStart,pr.prevEnd);
+  const incCards=cardsHTML([
+    {label:"Closed volume",value:money(cur.deals.volume),delta:deltaHTML(growth(cur.deals.volume,prev.deals.volume))},
+    {label:"ISA team income (5% GCI)",value:money(inc.teamPool),delta:deltaHTML(growth(inc.teamPool,incPrev.teamPool))},
+    {label:"Balance to agents/brokerage",value:money(inc.brokerage),sub:"95% of GCI"},
+  ]);
+  let rows="";
+  ISA_NAMES.forEach(name=>{const dd=aggregate(name,pr.start,pr.end),rr=ratios(dd);
+    rows+=`<tr><td><span class="dot" style="background:${ISA_HEX[name]}"></span>${name}</td>
+      <td class="num">${fmt(dd.funnel.newLeads)}</td><td class="num">${fmt(dd.appts.set)}</td>
+      <td class="num">${fmt(dd.appts.met)}</td><td class="num">${fmt(dd.deals.closed)}</td>
+      <td class="num">${pct(rr.contactRate)}</td><td class="num">${pct(rr.leadToClose)}</td>
+      <td class="num">${money(dd.deals.gci)}</td><td class="num">${money(inc.inc[name])}</td></tr>`;});
+  const leaderboard=`<table><thead><tr><th>ISA</th><th class="num">New</th><th class="num">Set</th>
+    <th class="num">Met</th><th class="num">Closed</th><th class="num">Contact%</th>
+    <th class="num">Lead→Close</th><th class="num">GCI</th><th class="num">ISA income</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  // ---- ISA department contribution to total office (SISU) ----
+  const office=officeAgg(pr.start,pr.end), officePrev=officeAgg(pr.prevStart,pr.prevEnd);
+  const shC=safe(cur.deals.closed,office.deals.closed),
+        shV=safe(cur.deals.volume,office.deals.volume),
+        shG=safe(cur.deals.gci,office.deals.gci);
+  const shGprev=safe(prev.deals.gci,officePrev.deals.gci);
+  const contribCards=cardsHTML([
+    {label:"ISA dept % of closings",value:pct(shC),sub:`${fmt(cur.deals.closed)} of ${fmt(office.deals.closed)} office`},
+    {label:"ISA dept % of volume",value:pct(shV),sub:`${money(cur.deals.volume)} of ${money(office.deals.volume)}`},
+    {label:"ISA dept % of GCI",value:pct(shG),delta:deltaHTML(growth(shG,shGprev))},
+  ]);
+  let crows="";
+  ISA_NAMES.forEach(name=>{const dd=aggregate(name,pr.start,pr.end);
+    crows+=`<tr><td><span class="dot" style="background:${ISA_HEX[name]}"></span>${name}</td>
+      <td class="num">${fmt(dd.deals.closed)}</td><td class="num">${money(dd.deals.volume)}</td>
+      <td class="num">${money(dd.deals.gci)}</td><td class="num">${pct(safe(dd.deals.gci,office.deals.gci))}</td></tr>`;});
+  const other={closed:Math.max(0,office.deals.closed-cur.deals.closed),
+    volume:Math.max(0,office.deals.volume-cur.deals.volume),
+    gci:Math.max(0,office.deals.gci-cur.deals.gci)};
+  const contribTable=`<table><thead><tr><th>Source</th><th class="num">Closings</th>
+    <th class="num">Volume</th><th class="num">GCI</th><th class="num">% office GCI</th></tr></thead><tbody>
+    ${crows}
+    <tr style="font-weight:700"><td>ISA department</td><td class="num">${fmt(cur.deals.closed)}</td>
+      <td class="num">${money(cur.deals.volume)}</td><td class="num">${money(cur.deals.gci)}</td>
+      <td class="num">${pct(shG)}</td></tr>
+    <tr><td>Other agents</td><td class="num">${fmt(other.closed)}</td>
+      <td class="num">${money(other.volume)}</td><td class="num">${money(other.gci)}</td>
+      <td class="num">${pct(safe(other.gci,office.deals.gci))}</td></tr>
+    <tr style="font-weight:700"><td>Whole office</td><td class="num">${fmt(office.deals.closed)}</td>
+      <td class="num">${money(office.deals.volume)}</td><td class="num">${money(office.deals.gci)}</td>
+      <td class="num">100.0%</td></tr>
+    </tbody></table>`;
+
+  document.getElementById("view").innerHTML=`
+    ${headlineCards(cur,prev)}
+    ${incCards}
+    <div class="panel"><h2>ISA department contribution to whole office <span class="hint">${pr.label} · office totals from SISU</span></h2>${contribCards}</div>
+    <div class="two">
+      <div class="panel"><h2>Contribution breakdown</h2>${contribTable}</div>
+      <div class="panel"><h2>Office GCI share <span class="hint">this period</span></h2><div class="chartbox"><canvas id="dough"></canvas></div></div>
+    </div>
+    <div class="panel"><h2>ISA share of office GCI by week <span class="hint">growth trend</span></h2><div class="chartbox"><canvas id="sharew"></canvas></div></div>
+    <div class="panel"><h2>ISA department funnel <span class="hint">${pr.label} · stage-to-stage conversion</span></h2>${funnelHTML(cur)}</div>
+    <div class="two">
+      <div class="panel"><h2>Conversion ratios vs goals</h2>${ratiosTableHTML(cur,teamGoals)}</div>
+      <div class="panel"><h2>Closings by week <span class="hint">by ISA</span></h2><div class="chartbox"><canvas id="tc"></canvas></div></div>
+    </div>
+    <div class="panel"><h2>ISA leaderboard <span class="hint">${pr.label}</span></h2>${leaderboard}</div>
+    <div class="two">
+      <div class="panel"><h2>GCI by week</h2><div class="chartbox"><canvas id="tg"></canvas></div></div>
+      <div class="panel"><h2>Contact rate by week</h2><div class="chartbox"><canvas id="tcr"></canvas></div></div>
+    </div>`;
+  doughnutGCI("dough",pr,office);
+  shareLine("sharew",pr);
+  lineByISA("tc",pr,x=>x.deals.closed);
+  lineByISA("tg",pr,x=>x.deals.gci,v=>"$"+(v/1000).toFixed(0)+"k");
+  lineByISA("tcr",pr,x=>ratios(x).contactRate*100,v=>v+"%");
+}
+function doughnutGCI(id,pr,office){const ctx=document.getElementById(id);if(!ctx)return;
+  const vals=ISA_NAMES.map(n=>aggregate(n,pr.start,pr.end).deals.gci);
+  const other=Math.max(0,office.deals.gci-vals.reduce((a,b)=>a+b,0));
+  charts.push(new Chart(ctx,{type:"doughnut",
+    data:{labels:[...ISA_NAMES,"Other agents"],datasets:[{data:[...vals,other],
+      backgroundColor:[ISA_HEX.Jennifer,ISA_HEX.Kahla,ISA_HEX.Sheryl,"#4b5675"],borderColor:"#0f1420",borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"right",labels:{color:tickColor}},
+        tooltip:{callbacks:{label:c=>c.label+": "+money(c.raw)}}}}}));}
+function shareLine(id,pr){const ctx=document.getElementById(id);if(!ctx)return;
+  const wr=DATA.weeks.filter(w=>{const ws=d(w.start);return ws>=pr.start&&ws<=pr.end;});
+  const labels=wr.map(w=>shortLbl(w.start));
+  const data=wr.map(w=>{const isa=ISA_NAMES.reduce((a,n)=>a+w.isas[n].deals.gci,0);
+    return +(safe(isa,w.team.deals.gci)*100).toFixed(1);});
+  charts.push(new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"ISA % of office GCI",
+    data,borderColor:"#4f8cff",backgroundColor:"#4f8cff33",tension:.3,borderWidth:2,pointRadius:2,fill:true}]},
+    options:baseOpts(v=>v+"%")}));}
+
+function renderISA(name,pr){
+  const cur=aggregate(name,pr.start,pr.end), prev=aggregate(name,pr.prevStart,pr.prevEnd);
+  const g=goalsFor(name);
+  const days=Math.max(1,Math.round((pr.end-pr.start)/864e5)+1);
+  const workdays=Math.max(1,days*5/7);
+  const callsPerDay=cur.activity.calls/workdays;
+  const weeks=Math.max(1,days/7), apptsPerWeek=cur.appts.set/weeks;
+  const closingsPerMonth=cur.deals.closed/(days/30.4);
+
+  const incNow=incomeByISA(pr.start,pr.end), incPrev=incomeByISA(pr.prevStart,pr.prevEnd);
+  const cards=headlineCards(cur,prev);
+  const extraItems=[
+    {label:"Calls",value:fmt(cur.activity.calls),delta:deltaHTML(growth(cur.activity.calls,prev.activity.calls))},
+    {label:"Talk time",value:(cur.activity.talkMin/60).toFixed(1)+"h",sub:"total"},
+    {label:"Dials / contact",value:safe(cur.activity.calls,cur.activity.contacts).toFixed(1),sub:"lower is better"},
+    {label:"No-shows",value:fmt(cur.appts.noShow),delta:deltaHTML(growth(cur.appts.noShow,prev.appts.noShow))},
+    {label:"Your income",value:money(incNow.inc[name]),delta:deltaHTML(growth(incNow.inc[name],incPrev.inc[name]))},
+  ];
+  if(name===CONFIG.comp.manager){
+    const override=CONFIG.comp.managerShare*(incNow.total-incNow.gci[name]);
+    extraItems.push({label:"Mgr override incl.",value:money(override),sub:"2.5% of others' GCI"});
+  }
+  const extra=cardsHTML(extraItems);
+
+  // goals editor
+  const gi=(k,label,isPct,step)=>`<div class="goaledit"><label>${label}</label>
+    <input type="number" step="${step}" data-gk="${k}" value="${isPct?(g[k]*100):g[k]}"></div>`;
+  const editor=`
+    <div class="goaledit" style="grid-template-columns:1fr 96px;font-weight:700;color:var(--text)">
+      <div>Goal</div><div style="text-align:right">Target</div></div>
+    ${gi("contactRate","Contact rate %",true,1)}
+    ${gi("newToApptSet","Lead → Appt set %",true,1)}
+    ${gi("apptSetToMet","Appt set → Met %",true,1)}
+    ${gi("metToContract","Met → Under contract %",true,1)}
+    ${gi("contractToClose","U/C → Closed %",true,1)}
+    ${gi("leadToClose","Lead → Close %",true,0.5)}
+    ${gi("callsPerDay","Calls / day",false,1)}
+    ${gi("apptsSetPerWeek","Appts set / week",false,1)}
+    ${gi("closingsPerMonth","Closings / month",false,1)}
+    <div class="row-actions">
+      <button class="btn" id="saveGoals">Save goals</button>
+      <button class="btn ghost" id="copyGoals">Copy goals JSON</button>
+      <button class="btn ghost" id="resetGoals">Reset</button>
+    </div>`;
+
+  // activity/pace goals vs actual
+  const pace=(label,actual,goal,unit)=>{const okc=actual>=goal?"g":actual>=goal*0.8?"y":"r";
+    const w=Math.min(100,safe(actual,goal*1.2)*100);const gpos=Math.min(100,safe(goal,Math.max(actual,goal)*1.2)*100);
+    const col=actual>=goal?"var(--good)":actual>=goal*0.8?"var(--warn)":"var(--bad)";
+    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px">
+      <span class="sub">${label}</span><span><span class="pill ${okc}">${actual.toFixed(1)}${unit}</span> / goal ${goal}${unit}</span></div>
+      <div class="track"><div class="fill" style="width:${w}%;background:${col}"></div><div class="goalmark" style="left:${gpos}%"></div></div></div>`;};
+  const paceHTML=pace("Calls per day",callsPerDay,g.callsPerDay,"")
+    +pace("Appts set per week",apptsPerWeek,g.apptsSetPerWeek,"")
+    +pace("Closings per month",closingsPerMonth,g.closingsPerMonth,"");
+
+  // coaching
+  const cs=coaching(name);
+  const coachHTML=cs.length?cs.map((s,i)=>`
+    <div class="coach ${i===0?'top':''}">
+      <div class="big">${s.lever} → <span class="impact">+${money(s.income)}/yr (${(s.pctInc*100).toFixed(0)}% income)</span></div>
+      <div class="sub">${s.detail}</div></div>`).join("")
+    :`<div class="sub">Not enough data to generate suggestions yet.</div>`;
+
+  document.getElementById("view").innerHTML=`
+    ${cards}${extra}
+    <div class="two">
+      <div class="panel"><h2>${name}'s funnel <span class="hint">${pr.label} · tag: ${CONFIG.isaTags[name]}</span></h2>${funnelHTML(cur)}</div>
+      <div class="panel"><h2>Set &amp; edit goals <span class="hint">saved to this browser</span></h2>${editor}</div>
+    </div>
+    <div class="two">
+      <div class="panel"><h2>Conversion ratios vs goals <span class="hint">${pr.label}</span></h2>${ratiosTableHTML(cur,g)}</div>
+      <div class="panel"><h2>Activity &amp; pace vs goals</h2>${paceHTML}</div>
+    </div>
+    <div class="panel"><h2>💡 Coaching suggestions <span class="hint">ranked by income impact · from trailing 8 weeks</span></h2>${coachHTML}</div>
+    <div class="two">
+      <div class="panel"><h2>Closings &amp; GCI by week</h2><div class="chartbox"><canvas id="it"></canvas></div></div>
+      <div class="panel"><h2>Contact rate &amp; lead→close by week</h2><div class="chartbox"><canvas id="ir"></canvas></div></div>
+    </div>`;
+
+  // wire goal editor
+  const readInputs=()=>{const o={};document.querySelectorAll("[data-gk]").forEach(inp=>{
+    const k=inp.dataset.gk;let v=parseFloat(inp.value)||0;
+    if(["contactRate","newToApptSet","apptSetToMet","metToContract","contractToClose","leadToClose"].includes(k))v=v/100;
+    o[k]=v;});return o;};
+  document.getElementById("saveGoals").onclick=()=>{saveGoals(name,readInputs());toast("Goals saved");render();};
+  document.getElementById("resetGoals").onclick=()=>{const all=loadGoals();delete all[name];
+    localStorage.setItem(GKEY,JSON.stringify(all));toast("Goals reset to default");render();};
+  document.getElementById("copyGoals").onclick=()=>{const all=loadGoals();
+    navigator.clipboard.writeText(JSON.stringify(all,null,2)).then(()=>toast("Goals JSON copied — paste into the file to bake in"));};
+
+  isaDualChart("it",name,pr);
+  lineDual("ir",name,pr);
+}
+
+/* ============================ charts ============================ */
+function baseOpts(fmtY){return{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{labels:{color:tickColor}}},
+  scales:{x:{grid:{color:gridColor},ticks:{color:tickColor,maxTicksLimit:12}},
+    y:{grid:{color:gridColor},ticks:{color:tickColor,callback:fmtY||(v=>v)}}}};}
+function lineByISA(id,pr,val,fmtY){const ctx=document.getElementById(id);if(!ctx)return;
+  const ref=weeksInRange("Team",pr.start,pr.end); const labels=ref.map(w=>shortLbl(w.start));
+  const ds=ISA_NAMES.map(name=>{const wr=weeksInRange(name,pr.start,pr.end);
+    return{label:name,data:wr.map(w=>val(w.data)),borderColor:ISA_HEX[name],
+      backgroundColor:ISA_HEX[name]+"22",tension:.3,borderWidth:2,pointRadius:2,fill:false};});
+  charts.push(new Chart(ctx,{type:"line",data:{labels,datasets:ds},options:baseOpts(fmtY)}));}
+function isaDualChart(id,name,pr){const ctx=document.getElementById(id);if(!ctx)return;
+  const wr=weeksInRange(name,pr.start,pr.end);const labels=wr.map(w=>shortLbl(w.start));
+  charts.push(new Chart(ctx,{type:"bar",data:{labels,datasets:[
+    {label:"Closings",yAxisID:"y",data:wr.map(w=>w.data.deals.closed),backgroundColor:ISA_HEX[name]},
+    {label:"GCI",yAxisID:"y1",type:"line",data:wr.map(w=>w.data.deals.gci),borderColor:"#f59e0b",
+      backgroundColor:"#f59e0b22",tension:.3,borderWidth:2,pointRadius:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tickColor}}},
+      scales:{x:{grid:{color:gridColor},ticks:{color:tickColor,maxTicksLimit:12}},
+        y:{position:"left",grid:{color:gridColor},ticks:{color:tickColor}},
+        y1:{position:"right",grid:{display:false},ticks:{color:tickColor,callback:v=>"$"+(v/1000).toFixed(0)+"k"}}}}}));}
+function lineDual(id,name,pr){const ctx=document.getElementById(id);if(!ctx)return;
+  const wr=weeksInRange(name,pr.start,pr.end);const labels=wr.map(w=>shortLbl(w.start));
+  charts.push(new Chart(ctx,{type:"line",data:{labels,datasets:[
+    {label:"Contact rate %",data:wr.map(w=>+(ratios(w.data).contactRate*100).toFixed(1)),
+      borderColor:"#4f8cff",backgroundColor:"#4f8cff22",tension:.3,borderWidth:2,pointRadius:2},
+    {label:"Lead→Close %",data:wr.map(w=>+(ratios(w.data).leadToClose*100).toFixed(1)),
+      borderColor:"#22c55e",backgroundColor:"#22c55e22",tension:.3,borderWidth:2,pointRadius:2}]},
+    options:baseOpts(v=>v+"%")}));}
+function shortLbl(iso){const dt=d(iso);return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"});}
+
+/* ============================ shell ============================ */
+let currentTab="Team";
+function render(){
+  const pr=periodRange(document.getElementById("periodSel").value);
+  document.getElementById("rangeLabel").textContent=`${pr.label}: ${fmtDate(pr.start)} – ${fmtDate(pr.end)}`;
+  clearCharts();
+  if(currentTab==="Team")renderTeam(pr); else renderISA(currentTab,pr);
+}
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
+function init(){
+  document.getElementById("asOf").textContent="as of "+fmtDate(ASOF);
+  if(!CONFIG.sample)document.getElementById("sampleBanner").classList.add("hide");
+  const tabs=["Team",...ISA_NAMES];const tw=document.getElementById("tabs");
+  tw.innerHTML=tabs.map((t,i)=>`<div class="tab${i===0?' active':''}" data-tab="${t}">${t}</div>`).join("");
+  tw.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{
+    tw.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");
+    currentTab=el.dataset.tab;render();});
+  document.getElementById("periodSel").onchange=render;
+  render();
+}
+
+/* ============================ passcode gate ============================
+   NOTE: this is a light gate for the SAMPLE prototype. For the LIVE version the
+   data payload itself will be encrypted with the passcode, so numbers can't be
+   read from page source. To change the passcode now: replace PASS_HASH below with
+   the SHA-256 hex of your new passcode.
+   Current placeholder passcode: teamtracker2026  — CHANGE THIS before real use. */
+const PASS_HASH="97a86b440c92e46b70121201f77a4a316984c940caf1383c8892eb4b9da8fee6";
+async function sha256hex(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+async function tryUnlock(){
+  const inp=document.getElementById("lockInput"), err=document.getElementById("lockErr");
+  const h=await sha256hex(inp.value);
+  if(h===PASS_HASH){document.body.classList.remove("locked");
+    document.getElementById("lock").style.display="none";init();}
+  else{err.textContent="Incorrect passcode";inp.value="";}
+}
+document.getElementById("lockBtn").onclick=tryUnlock;
+document.getElementById("lockInput").addEventListener("keydown",e=>{if(e.key==="Enter")tryUnlock();});
+document.getElementById("lockInput").focus();
+</script>
+</body>
+</html>
