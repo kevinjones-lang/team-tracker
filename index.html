@@ -49,6 +49,14 @@
   .funnel-bar{position:relative;flex:1;background:var(--panel2);border-radius:8px;height:34px;overflow:hidden}
   .funnel-fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--accent),#7aa8ff);display:flex;align-items:center;padding-left:12px;font-weight:700;font-size:13px;color:#fff;border-radius:8px;min-width:44px}
   .conv{width:96px;font-size:12px;color:var(--muted)}.conv b{color:var(--text)}
+  .slider{margin-bottom:14px}
+  .slider .row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .slider .row .v{font-weight:700;color:var(--text)}
+  .slider input[type=range]{width:100%;-webkit-appearance:none;height:6px;border-radius:999px;background:var(--panel2);outline:none}
+  .slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #0f1420}
+  .fcout{background:var(--panel2);border-radius:12px;padding:14px 16px;margin-bottom:10px}
+  .fcout .big{font-size:26px;font-weight:700}.fcout .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .fcin{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px 9px;font-size:14px;width:130px;text-align:right}
   .banner{background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.35);color:#bcd2ff;padding:10px 14px;border-radius:12px;font-size:13px;margin:14px 0 0}
   footer{color:var(--muted);font-size:12px;margin-top:26px;text-align:center;line-height:1.7}
   #lock{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
@@ -277,15 +285,89 @@ function renderISA(name,keys,id){
       <div class="panel"><h2>💡 Coaching <span class="hint">ranked by income impact</span></h2>${coachHTML}</div>
     </div>`;
   }
+  // ===== interactive forecast / goal planner =====
+  let forecast="", base=null;
+  if(a){
+    const totClose=s.sale_u+s.rent_u;
+    const avgGci=Math.round(safe(gci,totClose)||safe(off.gci,off.units)||10000);
+    base={leads:a.leads,contact:safe(a.contacted,a.leads),c2a:safe(a.apptPlus,a.contacted),
+      a2m:safe(a.metPlus,a.apptPlus),m2c:safe(a.closedStage,a.metPlus),avgGci,
+      share:isMgr?(DATA.comp.closerShare+DATA.comp.managerShare):DATA.comp.closerShare};
+    const sl=(id,lbl,val,unit)=>`<div class="slider"><div class="row"><span class="sub">${lbl}</span><span class="v" id="v_${id}">${val}${unit}</span></div>
+      <input type="range" id="${id}" min="0" max="100" step="1" value="${Math.round(val)}"></div>`;
+    const leadMax=Math.max(300,Math.ceil(a.leads*1.5/50)*50);
+    forecast=`<div class="panel"><h2>🎯 Forecast &amp; goal planner <span class="hint">drag the pipeline to see what hits your target</span></h2>
+      <div class="two">
+        <div>
+          <div class="slider"><div class="row"><span class="sub">Converted leads (planning horizon)</span><span class="v" id="v_fLeads">${a.leads}</span></div>
+            <input type="range" id="fLeads" min="0" max="${leadMax}" step="5" value="${a.leads}"></div>
+          ${sl("fContact","Contact rate",Math.round(base.contact*100),"%")}
+          ${sl("fC2A","Contacted → Appointment",Math.round(base.c2a*100),"%")}
+          ${sl("fA2M","Appointment → Met",Math.round(base.a2m*100),"%")}
+          ${sl("fM2C","Met → Close",Math.round(base.m2c*100),"%")}
+          <div class="slider"><div class="row"><span class="sub">Avg GCI per closing</span><span class="v" id="v_fGci">${money(avgGci)}</span></div>
+            <input type="range" id="fGci" min="2000" max="30000" step="500" value="${avgGci}"></div>
+          <button class="btn ghost" id="fReset" style="margin-top:4px">Reset to current</button>
+        </div>
+        <div>
+          <div class="fcout"><div class="lbl">Projected closings</div><div class="big" id="oClose">–</div></div>
+          <div class="fcout"><div class="lbl">Projected sourced GCI</div><div class="big" id="oGci">–</div></div>
+          <div class="fcout" style="border:1px solid var(--accent)"><div class="lbl">Projected income (${isMgr?'5% own':'2.5% of GCI'})</div><div class="big up" id="oInc">–</div></div>
+          <div style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span class="sub">Target income</span><input class="fcin" type="number" id="fTarget" step="500" value="${Math.max(g.income*3,5000)}"></div>
+          <div class="sub" id="oPlan" style="margin-top:10px;line-height:1.6"></div>
+        </div>
+      </div></div>`;
+  }
   document.getElementById("view").innerHTML=`${cards}
     ${pipeline}
+    ${forecast}
     <div class="two">
       <div class="panel"><h2>${name} — monthly sourced GCI &amp; income <span class="hint">2026</span></h2><div class="chartbox"><canvas id="im"></canvas></div></div>
       <div class="panel"><h2>Goals vs actuals <span class="hint">white mark = goal</span></h2>${paceHTML}<hr style="border-color:var(--line);margin:16px 0">${editor}</div>
     </div>`;
   document.getElementById("sg").onclick=()=>{const o={};document.querySelectorAll("[data-gk]").forEach(i=>o[i.dataset.gk]=parseFloat(i.value)||0);saveGoals(name,o);toast("Goals saved");render();};
   document.getElementById("rg").onclick=()=>{const a=loadGoals();delete a[name];localStorage.setItem(GKEY,JSON.stringify(a));toast("Reset");render();};
+  if(base) bindForecast(base);
   drawISA(name);
+}
+
+function bindForecast(base){
+  const $=id=>document.getElementById(id);
+  const rd=()=>({leads:+$("fLeads").value,contact:+$("fContact").value/100,c2a:+$("fC2A").value/100,
+    a2m:+$("fA2M").value/100,m2c:+$("fM2C").value/100,avgGci:+$("fGci").value,target:+$("fTarget").value});
+  function recompute(){
+    const v=rd();
+    $("v_fLeads").textContent=v.leads;$("v_fContact").textContent=Math.round(v.contact*100)+"%";
+    $("v_fC2A").textContent=Math.round(v.c2a*100)+"%";$("v_fA2M").textContent=Math.round(v.a2m*100)+"%";
+    $("v_fM2C").textContent=Math.round(v.m2c*100)+"%";$("v_fGci").textContent=money(v.avgGci);
+    const closings=v.leads*v.contact*v.c2a*v.a2m*v.m2c;
+    const gci=closings*v.avgGci, inc=gci*base.share;
+    $("oClose").textContent=closings.toFixed(1);
+    $("oGci").textContent=money(gci);
+    $("oInc").textContent=money(inc);
+    const incPerLead=v.contact*v.c2a*v.a2m*v.m2c*v.avgGci*base.share;
+    const incPerClose=v.avgGci*base.share;
+    const gap=v.target-inc;
+    let plan;
+    if(inc>=v.target){plan=`<span class="up">On track — projected income beats target by ${money(inc-v.target)}.</span>`;}
+    else{
+      const leadsNeed=incPerLead>0?Math.ceil(v.target/incPerLead):null;
+      const closeNeed=incPerClose>0?(v.target/incPerClose):null;
+      const m2cNeed=(v.leads*v.contact*v.c2a*v.a2m)>0?v.target/(v.leads*v.contact*v.c2a*v.a2m*v.avgGci*base.share):null;
+      plan=`Gap to target: <b class="down">${money(gap)}</b>.<br>
+        • Need <b>${leadsNeed!=null?leadsNeed:'—'}</b> converted leads at these rates (${leadsNeed!=null?'+'+(leadsNeed-v.leads):'—'} more), or<br>
+        • Close <b>${closeNeed!=null?closeNeed.toFixed(1):'—'}</b> deals total, or<br>
+        • Lift Met→Close to <b>${m2cNeed!=null&&m2cNeed<=1?Math.round(m2cNeed*100)+'%':'not reachable on this lever alone'}</b>.`;
+    }
+    $("oPlan").innerHTML=plan;
+  }
+  ["fLeads","fContact","fC2A","fA2M","fM2C","fGci"].forEach(id=>$(id).oninput=recompute);
+  $("fTarget").oninput=recompute;
+  $("fReset").onclick=()=>{$("fLeads").value=base.leads;$("fContact").value=Math.round(base.contact*100);
+    $("fC2A").value=Math.round(base.c2a*100);$("fA2M").value=Math.round(base.a2m*100);
+    $("fM2C").value=Math.round(base.m2c*100);$("fGci").value=base.avgGci;recompute();};
+  recompute();
 }
 
 /* ===== charts ===== */
