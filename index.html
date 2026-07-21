@@ -571,6 +571,62 @@ function renderAgents(keys){
       <div class="panel"><h2>🎯 Needs coaching</h2>${coachHTML}</div></div>`;
   document.querySelectorAll(".agrow").forEach(el=>el.onclick=()=>{currentAgent=decodeURIComponent(el.dataset.agent);render();});
 }
+function agentPlanner(name,b){
+  const sl=(id,lbl,val,unit,mn,mx,st)=>`<div class="slider"><div class="row"><span class="sub">${lbl}</span><span class="v" id="v_${id}">${val}${unit||''}</span></div>
+    <input type="range" id="${id}" min="${mn}" max="${mx}" step="${st}" value="${val}"></div>`;
+  const leadMax=Math.max(300,Math.ceil((b.leads||50)*1.5/25)*25);
+  return `<div class="panel"><h2>🎯 Goal planner <span class="hint">pre-filled with ${name}'s actuals · set a goal, see what it takes</span></h2>
+    <div class="two">
+      <div>
+        <div class="sub" style="margin-bottom:8px">Sliders start at ${name}'s <b>actual</b> rates for this period — drag to model a goal.</div>
+        <div class="slider"><div class="row"><span class="sub">Leads (planning horizon)</span><span class="v" id="v_apLeads">${b.leads}</span></div>
+          <input type="range" id="apLeads" min="0" max="${leadMax}" step="5" value="${b.leads}"></div>
+        ${sl("apContact","Contact rate",Math.round(b.contact*100),"%",0,100,1)}
+        ${sl("apL2A","Lead → Appointment",Math.round(b.l2a*100),"%",0,100,1)}
+        ${sl("apA2M","Appointment → Met",Math.round(b.a2m*100),"%",0,100,1)}
+        ${sl("apM2C","Met → Close",Math.round(b.m2c*100),"%",0,100,1)}
+        <div class="slider"><div class="row"><span class="sub">Avg GCI per closing</span><span class="v" id="v_apGci">${money(b.avgGci)}</span></div>
+          <input type="range" id="apGci" min="2000" max="30000" step="500" value="${b.avgGci}"></div>
+        <button class="btn ghost" id="apReset" style="margin-top:4px">Reset to actuals</button>
+      </div>
+      <div>
+        <div class="fcout"><div class="lbl">Projected closings</div><div class="big" id="apoClose">–</div></div>
+        <div class="fcout"><div class="lbl">Projected GCI</div><div class="big up" id="apoGci">–</div></div>
+        <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span class="sub">Goal GCI</span><input class="fcin" type="number" id="apTarget" step="5000" value="${Math.max(Math.round((b.leads*b.contact*b.l2a*b.a2m*b.m2c*b.avgGci)/5000)*5000*1.3,50000)}"></div>
+        <div class="sub" id="apoPlan" style="margin-top:10px;line-height:1.6"></div>
+        <div class="sub" style="margin-top:10px">Full business-plan calculator: <a href="https://kevinajones.github.io/bly-team-calculators/business-plan-standalone.html" target="_blank" rel="noopener" style="color:var(--accent)">open ↗</a></div>
+      </div>
+    </div></div>`;
+}
+function bindAgentPlanner(b){
+  const $=id=>document.getElementById(id);
+  if(!$("apLeads"))return;
+  const rd=()=>({leads:+$("apLeads").value,contact:+$("apContact").value/100,l2a:+$("apL2A").value/100,
+    a2m:+$("apA2M").value/100,m2c:+$("apM2C").value/100,avgGci:+$("apGci").value,target:+$("apTarget").value});
+  function recompute(){const v=rd();
+    $("v_apLeads").textContent=v.leads;$("v_apContact").textContent=Math.round(v.contact*100)+"%";
+    $("v_apL2A").textContent=Math.round(v.l2a*100)+"%";$("v_apA2M").textContent=Math.round(v.a2m*100)+"%";
+    $("v_apM2C").textContent=Math.round(v.m2c*100)+"%";$("v_apGci").textContent=money(v.avgGci);
+    const closings=v.leads*v.contact*v.l2a*v.a2m*v.m2c, gci=closings*v.avgGci;
+    $("apoClose").textContent=closings.toFixed(1);$("apoGci").textContent=money(gci);
+    const perLead=v.contact*v.l2a*v.a2m*v.avgGci*v.m2c;
+    let plan;
+    if(gci>=v.target){plan=`<span class="up">On track — projected GCI beats the goal by ${money(gci-v.target)}.</span>`;}
+    else{const leadsNeed=perLead>0?Math.ceil(v.target/perLead):null;
+      const closeNeed=v.avgGci>0?v.target/v.avgGci:null;
+      const m2cNeed=(v.leads*v.contact*v.l2a*v.a2m*v.avgGci)>0?v.target/(v.leads*v.contact*v.l2a*v.a2m*v.avgGci):null;
+      plan=`Gap to goal: <b class="down">${money(v.target-gci)}</b>.<br>
+        • Need <b>${leadsNeed!=null?leadsNeed:'—'}</b> leads at these rates (${leadsNeed!=null?(leadsNeed-v.leads>=0?'+':'')+(leadsNeed-v.leads):'—'} vs now), or<br>
+        • Close <b>${closeNeed!=null?closeNeed.toFixed(1):'—'}</b> deals, or<br>
+        • Lift Met→Close to <b>${m2cNeed!=null&&m2cNeed<=1?Math.round(m2cNeed*100)+'%':'not reachable on this lever alone'}</b>.`;}
+    $("apoPlan").innerHTML=plan;
+  }
+  ["apLeads","apContact","apL2A","apA2M","apM2C","apGci","apTarget"].forEach(id=>$(id).oninput=recompute);
+  $("apReset").onclick=()=>{$("apLeads").value=b.leads;$("apContact").value=Math.round(b.contact*100);
+    $("apL2A").value=Math.round(b.l2a*100);$("apA2M").value=Math.round(b.a2m*100);$("apM2C").value=Math.round(b.m2c*100);$("apGci").value=b.avgGci;recompute();};
+  recompute();
+}
 function renderAgentDetail(name,keys){
   const D=DATA.dsAll;
   const rows=D.leads.filter(L=>(scopeMode==='isa'?L[0]>0:true) && D.agentList[L[4]]===name);
@@ -607,10 +663,9 @@ function renderAgentDetail(name,keys){
     {label:"Paid to eXp",value:money(expPaidSum(name,keys)),sub:"company commission"},
   ]):`<div class="banner" style="margin-top:0">No SISU closed production matched for ${name} in this period (name may differ between systems, or no closings yet).</div>`;
   const contactRate=safe(contacted,cohort.length), metClose=safe(clP.length,metPlus);
-  const calcPanel=`<div class="panel"><h2>🎯 Goal calculator (Business Plan) <span class="hint">set goals · compare to actuals</span></h2>
-    <div class="sub" style="margin-bottom:10px">${name}'s actuals this period — Closings <b>${fmt(prod.u)}</b> · GCI <b>${money(prod.g)}</b> · Contact <b>${pct(contactRate)}</b> · Appt→Met <b>${pct(safe(metPlus,apptPlus))}</b> · Met→Close <b>${pct(metClose)}</b>. Enter goals in the calculator, then compare against these.</div>
-    <iframe src="https://kevinajones.github.io/bly-team-calculators/business-plan-standalone.html" title="Business Plan Calculator" style="width:100%;height:860px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>
-    <div class="sub" style="margin-top:6px"><a href="https://kevinajones.github.io/bly-team-calculators/business-plan-standalone.html" target="_blank" rel="noopener" style="color:var(--accent)">Open calculator in a new tab ↗</a></div></div>`;
+  const planBase={leads:cohort.length||50,contact:contactRate,l2a:safe(apptPlus,cohort.length),
+    a2m:safe(metPlus,apptPlus),m2c:metClose,avgGci:Math.round(safe(prod.g,prod.u)||12000)};
+  const calcPanel=agentPlanner(name,planBase);
   const iconCards=cardsHTML([
     {label:"🏠 Total closings",value:fmt(prod.u)},{label:"💰 Total GCI",value:money(prod.g)},
     {label:"📈 Volume",value:money(prod.v)},{label:"🏢 Paid to eXp",value:money(expPaidSum(name,keys))},
@@ -642,6 +697,7 @@ function renderAgentDetail(name,keys){
   document.getElementById("view").innerHTML=header+(agentView==='cards'?cardsViewHTML:fullView);
   document.getElementById("agBack").onclick=()=>{currentAgent=null;render();};
   document.querySelectorAll("#agViewTog button").forEach(b=>b.onclick=()=>{agentView=b.dataset.view;render();});
+  bindAgentPlanner(planBase);
   // monthly closings chart (all-time by 2026 month)
   const labs=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const mc=labs.map((_,i)=>rows.filter(L=>L[7]===1&&L[6]===`2026-${String(i+1).padStart(2,'0')}`).length);
