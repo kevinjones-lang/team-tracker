@@ -87,6 +87,7 @@
     <div><h1>ISA Performance Tracker</h1><div class="sub" id="rangeLabel"></div></div>
     <div style="display:flex;align-items:center;gap:10px">
       <div id="scopeToggle" class="scopetog"><button data-scope="all" class="on">All Agents</button><button data-scope="isa">ISA-Converted</button></div>
+      <div id="dispToggle" class="scopetog" title="Show percentages or exact numbers/$"><button data-disp="pct" class="on">%</button><button data-disp="num">#/$</button></div>
       <span class="sub">Period</span>
       <select class="periodSel" id="periodSel">
         <option value="mtd">This Month (MTD)</option>
@@ -175,6 +176,7 @@ const grid="rgba(147,160,189,.12)",tick="#93a0bd";
 let currentTab="Office";
 let currentAgent=null;
 let agentView="full";  // 'full' (detailed rows) or 'cards' (icon metrics)
+let dispMode="pct";    // 'pct' (percentages) or 'num' (exact numbers/$)
 
 function render(){
   const id=document.getElementById("periodSel").value;
@@ -206,10 +208,11 @@ function renderOffice(keys,id){
   ]);
   let contrib="", dough="";
   if(isSales2026){
+    const P=dispMode==='pct';
     const cCards=cardsHTML([
-      {label:"ISA dept % of closings",value:pct(safe(dU,off.units)),sub:`${fmt(dU)} of ${fmt(off.units)} office`},
-      {label:"ISA dept % of volume",value:pct(safe(dV,off.volume)),sub:`${money(dV)} of ${money(off.volume)}`},
-      {label:"ISA dept % of GCI",value:pct(safe(dG,off.gci)),sub:`${money(dG)} of ${money(off.gci)}`},
+      {label:"ISA dept of closings",value:P?pct(safe(dU,off.units)):fmt(dU),sub:P?`${fmt(dU)} of ${fmt(off.units)} office`:`${pct(safe(dU,off.units))} of office`},
+      {label:"ISA dept of volume",value:P?pct(safe(dV,off.volume)):money(dV),sub:P?`${money(dV)} of ${money(off.volume)}`:`${pct(safe(dV,off.volume))} of office`},
+      {label:"ISA dept of GCI",value:P?pct(safe(dG,off.gci)):money(dG),sub:P?`${money(dG)} of ${money(off.gci)}`:`${pct(safe(dG,off.gci))} of office`},
       {label:"ISA lease deals",value:fmt(dRentU),sub:`${money(dRentG)} GCI (extra)`},
     ]);
     let rows="";
@@ -270,8 +273,10 @@ function funnelRow(rows,keys){
   const st=[["Leads",f.leads,"#93a0bd"],["Contacted",f.contacted,"#4f8cff"],["Appt Set",f.appt,"#38bdf8"],["Met",f.met,"#a855f7"],["Under Contract",f.uc,"#f59e0b"],["Closed",f.closed,"#22c55e"]];
   let h='<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;justify-content:center">';
   st.forEach(([lbl,v,col],i)=>{
-    if(i>0)h+=`<div class="sub" style="min-width:38px;text-align:center;font-size:11px"><b style="color:var(--text)">${pct(safe(v,st[i-1][1]))}</b><br>▶</div>`;
-    h+=ring(v,v/max,col,lbl,i>0?pct(safe(v,max))+' of leads':'');});
+    if(i>0){const prev=st[i-1][1];const btw=dispMode==='pct'?pct(safe(v,prev)):('−'+fmt(prev-v));
+      h+=`<div class="sub" style="min-width:40px;text-align:center;font-size:11px"><b style="color:var(--text)">${btw}</b><br>▶</div>`;}
+    const sub=i>0?(dispMode==='pct'?pct(safe(v,max))+' of leads':fmt(v)+' of '+fmt(max)):'';
+    h+=ring(v,v/max,col,lbl,sub);});
   return h+'</div>';
 }
 function circleFunnel(rows,keys){
@@ -585,16 +590,18 @@ function renderAgents(keys){
   const best=k=>Math.max(...real.map(r=>r[k]),0);
   const bC=best('contact'),bA=best('appt'),bM=best('met'),bCl=best('close'),bClo=best('closed');
   const hl=(v,b)=>v>=b&&b>0?' style="color:#4ade80;font-weight:700"':'';
+  const P=dispMode==='pct';
   const body=list.map(r=>{const p=agentProdSum(r.name,keys),ep=expPaidSum(r.name,keys);
     return `<tr class="agrow" data-agent="${encodeURIComponent(r.name)}" style="cursor:pointer">
     <td>${r.name}${r.name==='Deb Bly Team'?' <span class="sub">(shared)</span>':''} <span class="sub">›</span></td>
-    <td class="num">${fmt(r.leads)}</td><td class="num"${hl(r.contact,bC)}>${pct(r.contact)}</td>
-    <td class="num"${hl(r.appt,bA)}>${pct(r.appt)}</td><td class="num"${hl(r.met,bM)}>${pct(r.met)}</td>
-    <td class="num"${hl(r.close,bCl)}>${pct(r.close)}</td><td class="num"${hl(r.closed,bClo)}>${fmt(r.closed)}</td>
+    <td class="num">${fmt(r.leads)}</td><td class="num"${hl(r.contact,bC)}>${P?pct(r.contact):fmt(r.contacted)}</td>
+    <td class="num"${hl(r.appt,bA)}>${P?pct(r.appt):fmt(r.apptPlus)}</td><td class="num"${hl(r.met,bM)}>${P?pct(r.met):fmt(r.metPlus)}</td>
+    <td class="num"${hl(r.close,bCl)}>${P?pct(r.close):fmt(r.closed)}</td><td class="num"${hl(r.closed,bClo)}>${fmt(r.closed)}</td>
     <td class="num">${p.u?fmt(p.u):'–'}</td><td class="num">${p.g?money(p.g):'–'}</td>
     <td class="num">${ep?money(ep):'–'}</td></tr>`;}).join("");
   const leadHdr=scopeMode==='isa'?'ISA leads':'Leads', closeHdr=scopeMode==='isa'?'ISA closings':'Closings';
-  const table=`<div style="overflow-x:auto"><table><thead><tr><th>Sales agent</th><th class="num">${leadHdr}</th><th class="num">Contact%</th><th class="num">→Appt%</th><th class="num">Appt→Met%</th><th class="num">Met→Close%</th><th class="num">${closeHdr}</th><th class="num">Total closings</th><th class="num">Total GCI</th><th class="num">Paid to eXp</th></tr></thead><tbody>${body}</tbody></table></div>
+  const cH=P?['Contact%','→Appt%','Appt→Met%','Met→Close%']:['Contacted','Reached appt','Met','Closed'];
+  const table=`<div style="overflow-x:auto"><table><thead><tr><th>Sales agent</th><th class="num">${leadHdr}</th><th class="num">${cH[0]}</th><th class="num">${cH[1]}</th><th class="num">${cH[2]}</th><th class="num">${cH[3]}</th><th class="num">${closeHdr}</th><th class="num">Total closings</th><th class="num">Total GCI</th><th class="num">Paid to eXp</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px">Click any agent for their dashboard. Green = best on that metric. <b>Total closings/GCI</b> = all their SISU deals in the period (all sources). The leads/conversion columns follow the <b>${scopeMode==='isa'?'ISA-Converted':'All Agents'}</b> toggle.</div>`;
   const coach=[];
   real.filter(r=>r.leads>=10).forEach(r=>{const iss=[];
@@ -810,6 +817,10 @@ function start(){
   document.querySelectorAll("#scopeToggle button").forEach(b=>b.onclick=()=>{
     scopeMode=b.dataset.scope;
     document.querySelectorAll("#scopeToggle button").forEach(x=>x.classList.toggle("on",x.dataset.scope===scopeMode));
+    render();});
+  document.querySelectorAll("#dispToggle button").forEach(b=>b.onclick=()=>{
+    dispMode=b.dataset.disp;
+    document.querySelectorAll("#dispToggle button").forEach(x=>x.classList.toggle("on",x.dataset.disp===dispMode));
     render();});
   render();}
 
