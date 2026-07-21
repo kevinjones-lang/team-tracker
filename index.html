@@ -221,9 +221,25 @@ function renderOffice(keys,id){
   document.getElementById("view").innerHTML=`${prodCards}
     <div class="panel"><h2>Monthly office production <span class="hint">2026 vs 2025</span></h2><div class="chartbox"><canvas id="trend"></canvas></div></div>
     ${contrib}
-    ${analyticsPanelsAll(keys)}`;
+    ${analyticsPanelsAll(keys)}
+    <div class="panel"><h2>Lead source — closings over time <span class="hint">${scopeLabel()} · monthly 2026</span></h2><div class="chartbox"><canvas id="srcTrend"></canvas></div></div>`;
   drawTrend();
   if(isSales2026)drawDough(keys,off);
+  drawSourceTrend();
+}
+function drawSourceTrend(){
+  const ctx=document.getElementById("srcTrend");if(!ctx)return;
+  const D=DATA.dsAll, rows=dsAllRows().filter(L=>L[7]===1&&L[6]&&L[6].startsWith("2026"));
+  const bySrc={};rows.forEach(L=>{const s=D.srcList[L[2]];(bySrc[s]=bySrc[s]||{})[L[6]]=(bySrc[s][L[6]]||0)+1;});
+  const totals=Object.entries(bySrc).map(([s,m])=>[s,Object.values(m).reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]);
+  const top=totals.slice(0,6).map(t=>t[0]);
+  const labs=["Jan","Feb","Mar","Apr","May","Jun","Jul"];
+  const pal=["#4f8cff","#22c55e","#a855f7","#f59e0b","#ef4444","#38bdf8","#93a0bd"];
+  const ds=top.map((s,i)=>({label:s,data:labs.map((_,m)=>{const ym=`2026-${String(m+1).padStart(2,'0')}`;return (bySrc[s]||{})[ym]||0;}),
+    borderColor:pal[i],backgroundColor:pal[i]+"22",tension:.3,borderWidth:2,pointRadius:2,fill:false}));
+  charts.push(new Chart(ctx,{type:"line",data:{labels:labs,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tick}}},
+      scales:{x:{grid:{color:grid},ticks:{color:tick}},y:{grid:{color:grid},ticks:{color:tick,precision:0},title:{display:true,text:"Closings",color:tick}}}}}));
 }
 
 function renderISA(name,keys,id){
