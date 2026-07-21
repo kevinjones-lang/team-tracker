@@ -288,19 +288,24 @@ function circleFunnel(rows,keys){
 function coPanel(keys){
   if(!DATA.co)return "";
   const e=expTeamSum(keys||[]);
+  const eP=dispMode==='pct';
   const econCards=cardsHTML([
-    {label:"CO$ to Deb (period)",value:money(e.co),sub:"team-lead split"},
-    {label:"Paid to eXp (period)",value:money(e.paid),sub:pct(safe(e.paid,e.gci))+" of GCI"},
+    {label:"CO$ to Deb (period)",value:money(e.co),sub:eP?pct(safe(e.co,e.gci))+" of GCI":money(e.co)+" of "+money(e.gci)},
+    {label:"Paid to eXp (period)",value:money(e.paid),sub:eP?pct(safe(e.paid,e.gci))+" of GCI":money(e.paid)+" of "+money(e.gci)},
     {label:"GCI (eXp basis)",value:money(e.gci),sub:"period"},
   ]);
+  const P=dispMode==='pct';
   const bs=DATA.co.bySource, tot=DATA.co.totalCO||1;
   const rows=Object.entries(bs).sort((a,b)=>b[1].co-a[1].co);
-  const body=rows.map(([s,v])=>`<tr><td>${s}</td><td class="num">${money(v.co)}</td>
-    <td class="num">${bar(v.co/tot*100,'var(--good)')}${pct(v.co/tot)}</td>
-    <td class="num">${money(v.gci)}</td><td class="num">${pct(safe(v.co,v.gci))}</td></tr>`).join("");
+  const body=rows.map(([s,v])=>{const shr=P?pct(v.co/tot):money(v.co)+' of '+money(DATA.co.totalCO),
+      rate=P?pct(safe(v.co,v.gci)):money(v.co)+' / '+money(v.gci);
+    return `<tr><td>${s}</td><td class="num">${money(v.co)}</td>
+    <td class="num">${bar(v.co/tot*100,'var(--good)')}${shr}</td>
+    <td class="num">${money(v.gci)}</td><td class="num">${rate}</td></tr>`;}).join("");
+  const shrH=P?'% of CO$':'CO$ share', rateH=P?'CO$ as % of GCI':'CO$ / GCI';
   return `${econCards}
     <div class="panel"><h2>Company Dollar (CO$) by lead source <span class="hint">office team-lead split · 2026 · ${money(DATA.co.totalCO)} total</span></h2>
-    <div style="overflow-x:auto"><table><thead><tr><th>Lead source</th><th class="num">Company Dollar</th><th class="num">% of CO$</th><th class="num">GCI</th><th class="num">CO$ as % of GCI</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Lead source</th><th class="num">Company Dollar</th><th class="num">${shrH}</th><th class="num">GCI</th><th class="num">${rateH}</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px">CO$ = the team/office's commission split (from eXp "Team Leader Commission Splits"), matched to each closing's <b>SISU lead source</b> by address. "Other / unattributed" = closings not matched to a SISU source (incl. leases).</div>
     <div class="chartbox" style="margin-top:14px"><canvas id="coTrend"></canvas></div></div>
     <div class="panel"><h2>Company economics over time <span class="hint">team · monthly 2026 · CO$ to Deb vs paid to eXp</span></h2><div class="chartbox"><canvas id="expTrend"></canvas></div></div>`;
@@ -530,10 +535,13 @@ function computeAnalytics(mask,keys){
 }
 function bar(w,color){return `<span style="display:inline-block;width:60px;height:8px;background:var(--panel2);border-radius:4px;vertical-align:middle;margin-right:8px;position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:${w.toFixed(0)}%;background:${color};border-radius:4px"></span></span>`;}
 function srcBlock(A){
+  const P=dispMode==='pct';
   const tot=A.closings||1,rows=Object.entries(A.src).sort((a,b)=>(b[1].closings-a[1].closings)||(b[1].leads-a[1].leads)).slice(0,9);
   if(!rows.length)return '<div class="sub">No data in this period.</div>';
-  return `<table><thead><tr><th>Lead source</th><th class="num">Leads</th><th class="num">Closings</th><th class="num">% of closings</th></tr></thead><tbody>`+
-    rows.map(([s,v])=>`<tr><td>${s}</td><td class="num">${fmt(v.leads)}</td><td class="num">${fmt(v.closings)}</td><td class="num">${bar(v.closings/tot*100,'var(--accent)')}${pct(v.closings/tot)}</td></tr>`).join("")+`</tbody></table>`;
+  const shareH=P?'% of closings':'Closings share';
+  return `<table><thead><tr><th>Lead source</th><th class="num">Leads</th><th class="num">Closings</th><th class="num">${shareH}</th></tr></thead><tbody>`+
+    rows.map(([s,v])=>{const share=P?pct(v.closings/tot):fmt(v.closings)+' of '+fmt(A.closings);
+      return `<tr><td>${s}</td><td class="num">${fmt(v.leads)}</td><td class="num">${fmt(v.closings)}</td><td class="num">${bar(v.closings/tot*100,'var(--accent)')}${share}</td></tr>`;}).join("")+`</tbody></table>`;
 }
 function stageBlock(A){
   const st=A.stg,max=Math.max(...Object.values(st),1);
