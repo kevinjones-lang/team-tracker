@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ISA Performance Tracker — The Bly Team</title>
+<title>The Bly Team Conversion Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{--bg:#0f1420;--panel:#181f30;--panel2:#1f2740;--line:#2b3450;--text:#e9edf6;
@@ -11,13 +11,14 @@
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
-  .wrap{max-width:1240px;margin:0 auto;padding:22px 20px 70px}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 20px 70px}
+  .topbar{position:sticky;top:0;z-index:100;background:var(--bg);padding:16px 0 12px;margin-bottom:16px;border-bottom:1px solid var(--line);box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
   header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
   h1{font-size:21px;margin:0}
   .sub{color:var(--muted);font-size:13px}
   select.periodSel{background:var(--panel);color:var(--text);border:1px solid var(--line);
     border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600}
-  .tabs{display:flex;gap:6px;margin:18px 0 20px;flex-wrap:wrap}
+  .tabs{display:flex;gap:6px;margin:14px 0 0;flex-wrap:wrap}
   .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);
     padding:8px 16px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:600}
   .tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -75,7 +76,7 @@
 </head>
 <body class="locked">
 <div id="lock"><div class="box">
-  <h2>The Bly Team · ISA Tracker</h2>
+  <h2>The Bly Team Conversion Tracker</h2>
   <p>Enter the team passcode to view.</p>
   <div class="err" id="lockErr"></div>
   <input type="password" id="lockInput" placeholder="Passcode" autocomplete="off">
@@ -83,25 +84,27 @@
 </div></div>
 
 <div class="wrap">
-  <header class="top">
-    <div><h1>ISA Performance Tracker</h1><div class="sub" id="rangeLabel"></div></div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <div id="scopeToggle" class="scopetog"><button data-scope="all" class="on">All Agents</button><button data-scope="isa">ISA-Converted</button></div>
-      <div id="dispToggle" class="scopetog" title="Show percentages or exact numbers/$"><button data-disp="pct" class="on">%</button><button data-disp="num">#/$</button></div>
-      <span class="sub">Period</span>
-      <select class="periodSel" id="periodSel">
-        <option value="mtd">This Month (MTD)</option>
-        <option value="lastMonth">Last Month</option>
-        <option value="ytd" selected>Year to Date</option>
-        <option value="l3">Last 3 Months</option>
-        <option value="l6">Last 6 Months</option>
-        <option value="l12">Last 12 Months</option>
-        <option value="lastYear">Last Year (2025)</option>
-      </select>
-    </div>
-  </header>
+  <div class="topbar">
+    <header class="top">
+      <div><h1>The Bly Team Conversion Tracker</h1><div class="sub" id="rangeLabel"></div></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div id="scopeToggle" class="scopetog"><button data-scope="all" class="on">All Agents</button><button data-scope="isa">ISA-Converted</button></div>
+        <div id="dispToggle" class="scopetog" title="Show percentages or exact numbers/$"><button data-disp="pct" class="on">%</button><button data-disp="num">#/$</button></div>
+        <span class="sub">Period</span>
+        <select class="periodSel" id="periodSel">
+          <option value="mtd">This Month (MTD)</option>
+          <option value="lastMonth">Last Month</option>
+          <option value="ytd" selected>Year to Date</option>
+          <option value="l3">Last 3 Months</option>
+          <option value="l6">Last 6 Months</option>
+          <option value="l12">Last 12 Months</option>
+          <option value="lastYear">Last Year (2025)</option>
+        </select>
+      </div>
+    </header>
+    <div class="tabs" id="tabs"></div>
+  </div>
   <div class="banner">Live data · Office production from <b>SISU</b> (non-rental sales) · ISA attribution from <b>Follow Up Boss</b> "Converted" tags matched to SISU by address · GCI from SISU.</div>
-  <div class="tabs" id="tabs"></div>
   <div id="view"></div>
   <footer id="foot"></footer>
 </div>
