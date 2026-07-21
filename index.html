@@ -89,11 +89,13 @@
       <div id="scopeToggle" class="scopetog"><button data-scope="all" class="on">All Agents</button><button data-scope="isa">ISA-Converted</button></div>
       <span class="sub">Period</span>
       <select class="periodSel" id="periodSel">
-        <option value="mtd">This Month</option>
-        <option value="ytd" selected>Year to Date (2026)</option>
+        <option value="mtd">This Month (MTD)</option>
+        <option value="lastMonth">Last Month</option>
+        <option value="ytd" selected>Year to Date</option>
         <option value="l3">Last 3 Months</option>
         <option value="l6">Last 6 Months</option>
-        <option value="y2025">Full Year 2025</option>
+        <option value="l12">Last 12 Months</option>
+        <option value="lastYear">Last Year (2025)</option>
       </select>
     </div>
   </header>
@@ -125,14 +127,18 @@ const fmt=n=>Math.round(n).toLocaleString("en-US");
 const money=n=>"$"+Math.round(n).toLocaleString("en-US");
 const pct=n=>(n*100).toFixed(1)+"%";
 const safe=(a,b)=>b>0?a/b:0;
+const ALL_MONTHS=(()=>{const a=[];for(let y=2024;y<=2026;y++)for(let m=1;m<=12;m++)a.push(`${y}-${String(m).padStart(2,'0')}`);return a.filter(k=>k<="2026-07");})();
+function lastN(n){return ALL_MONTHS.slice(-n);}
 function monthsFor(id){
   const M=y=>[...Array(12)].map((_,i)=>`${y}-${String(i+1).padStart(2,'0')}`);
   const y26=M(2026).filter(k=>k<="2026-07");
   if(id==="mtd")return ["2026-07"];
+  if(id==="lastMonth")return ["2026-06"];
   if(id==="ytd")return y26;
-  if(id==="l3")return ["2026-05","2026-06","2026-07"];
-  if(id==="l6")return ["2026-02","2026-03","2026-04","2026-05","2026-06","2026-07"];
-  if(id==="y2025")return M(2025);
+  if(id==="l3")return lastN(3);
+  if(id==="l6")return lastN(6);
+  if(id==="l12")return lastN(12);
+  if(id==="lastYear"||id==="y2025")return M(2025);
   return y26;
 }
 const priorYear=k=>(+k.slice(0,4)-1)+k.slice(4);
@@ -167,15 +173,17 @@ function saveGoals(n,o){const a=loadGoals();a[n]={...(a[n]||{}),...o};localStora
 let charts=[];const clr=()=>{charts.forEach(c=>c.destroy());charts=[];};
 const grid="rgba(147,160,189,.12)",tick="#93a0bd";
 let currentTab="Office";
+let currentAgent=null;
+let agentView="full";  // 'full' (detailed rows) or 'cards' (icon metrics)
 
 function render(){
   const id=document.getElementById("periodSel").value;
   const keys=monthsFor(id);
-  const label={mtd:"This month (Jul 2026)",ytd:"Year to date 2026",l3:"Last 3 months",l6:"Last 6 months",y2025:"Full year 2025"}[id];
+  const label={mtd:"This month (Jul 2026)",lastMonth:"Last month (Jun 2026)",ytd:"Year to date 2026",l3:"Last 3 months",l6:"Last 6 months",l12:"Last 12 months",lastYear:"Last year (2025)"}[id]||id;
   document.getElementById("rangeLabel").textContent=label+" · "+keys[0]+" → "+keys[keys.length-1];
   clr();
   if(currentTab==="Office")renderOffice(keys,id);
-  else if(currentTab==="Agents")renderAgents(keys);
+  else if(currentTab==="Agents"){ currentAgent?renderAgentDetail(currentAgent,keys):renderAgents(keys); }
   else renderISA(currentTab,keys,id);
 }
 
@@ -561,7 +569,7 @@ function renderAgents(keys){
     <div class="panel"><h2>Sales agent scorecard <span class="hint">ranked by closings</span></h2>${table}</div>
     <div class="two"><div class="panel"><h2>⭐ Strengths</h2>${starHTML}</div>
       <div class="panel"><h2>🎯 Needs coaching</h2>${coachHTML}</div></div>`;
-  document.querySelectorAll(".agrow").forEach(el=>el.onclick=()=>renderAgentDetail(decodeURIComponent(el.dataset.agent),keys));
+  document.querySelectorAll(".agrow").forEach(el=>el.onclick=()=>{currentAgent=decodeURIComponent(el.dataset.agent);render();});
 }
 function renderAgentDetail(name,keys){
   const D=DATA.dsAll;
@@ -598,10 +606,22 @@ function renderAgentDetail(name,keys){
     {label:"Avg GCI / closing",value:money(safe(prod.g,prod.u)),sub:"all sources"},
     {label:"Paid to eXp",value:money(expPaidSum(name,keys)),sub:"company commission"},
   ]):`<div class="banner" style="margin-top:0">No SISU closed production matched for ${name} in this period (name may differ between systems, or no closings yet).</div>`;
-  document.getElementById("view").innerHTML=`
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-      <button class="btn ghost" id="agBack">← Back to Agent Insights</button>
-      <h2 style="margin:0">${name} <span class="sub" style="font-weight:400">· sales agent dashboard</span></h2></div>
+  const contactRate=safe(contacted,cohort.length), metClose=safe(clP.length,metPlus);
+  const calcPanel=`<div class="panel"><h2>🎯 Goal calculator (Business Plan) <span class="hint">set goals · compare to actuals</span></h2>
+    <div class="sub" style="margin-bottom:10px">${name}'s actuals this period — Closings <b>${fmt(prod.u)}</b> · GCI <b>${money(prod.g)}</b> · Contact <b>${pct(contactRate)}</b> · Appt→Met <b>${pct(safe(metPlus,apptPlus))}</b> · Met→Close <b>${pct(metClose)}</b>. Enter goals in the calculator, then compare against these.</div>
+    <iframe src="https://kevinajones.github.io/bly-team-calculators/business-plan-standalone.html" title="Business Plan Calculator" style="width:100%;height:860px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>
+    <div class="sub" style="margin-top:6px"><a href="https://kevinajones.github.io/bly-team-calculators/business-plan-standalone.html" target="_blank" rel="noopener" style="color:var(--accent)">Open calculator in a new tab ↗</a></div></div>`;
+  const iconCards=cardsHTML([
+    {label:"🏠 Total closings",value:fmt(prod.u)},{label:"💰 Total GCI",value:money(prod.g)},
+    {label:"📈 Volume",value:money(prod.v)},{label:"🏢 Paid to eXp",value:money(expPaidSum(name,keys))},
+    {label:"🎯 Leads",value:fmt(cohort.length)},{label:"📞 Contact rate",value:pct(contactRate)},
+    {label:"🤝 Met→Close",value:pct(metClose)},{label:"✅ Closings ("+(scopeMode==='isa'?'ISA':'all')+")",value:fmt(clP.length)},
+  ]);
+  const header=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn ghost" id="agBack">← Back</button>
+      <h2 style="margin:0">${name} <span class="sub" style="font-weight:400">· sales agent dashboard</span></h2>
+      <div id="agViewTog" class="scopetog" style="margin-left:auto"><button data-view="full"${agentView==='full'?' class="on"':''}>Detailed</button><button data-view="cards"${agentView==='cards'?' class="on"':''}>Cards</button></div></div>`;
+  const fullView=`
     <div class="sub" style="margin:2px 0 10px">Total production <span style="color:var(--muted)">(all deals, from SISU)</span></div>
     ${prodCards}
     ${hasProd?`<div class="panel"><h2>Monthly production <span class="hint">2026 · all sources</span></h2><div class="chartbox"><canvas id="agProd"></canvas></div></div>`:''}
@@ -616,8 +636,12 @@ function renderAgentDetail(name,keys){
       <div class="panel"><h2>Which ISA feeds them <span class="hint">period cohort</span></h2>
         <table><thead><tr><th>ISA</th><th class="num">Leads</th><th class="num">Share</th></tr></thead><tbody>${feedHTML}</tbody></table></div>
     </div>
-    <div class="panel"><h2>Pipeline by stage <span class="hint">current stage · ${fmt(cohort.length)} leads</span></h2>${stageBlock(scoped)}</div>`;
-  document.getElementById("agBack").onclick=()=>renderAgents(keys);
+    <div class="panel"><h2>Pipeline by stage <span class="hint">current stage · ${fmt(cohort.length)} leads</span></h2>${stageBlock(scoped)}</div>
+    ${calcPanel}`;
+  const cardsViewHTML=`${iconCards}${calcPanel}`;
+  document.getElementById("view").innerHTML=header+(agentView==='cards'?cardsViewHTML:fullView);
+  document.getElementById("agBack").onclick=()=>{currentAgent=null;render();};
+  document.querySelectorAll("#agViewTog button").forEach(b=>b.onclick=()=>{agentView=b.dataset.view;render();});
   // monthly closings chart (all-time by 2026 month)
   const labs=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const mc=labs.map((_,i)=>rows.filter(L=>L[7]===1&&L[6]===`2026-${String(i+1).padStart(2,'0')}`).length);
@@ -671,7 +695,7 @@ function drawISA(name){const ctx=document.getElementById("im");if(!ctx)return;
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1600);}
 function buildTabs(){const tabs=[["Office","Office / Team"],...DATA.isaNames.map(n=>[n,n]),["Agents","Agent Insights"]];const w=document.getElementById("tabs");
   w.innerHTML=tabs.map(([id,lbl],i)=>`<div class="tab${i===0?' active':''}" data-tab="${id}">${lbl}</div>`).join("");
-  w.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{w.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");currentTab=el.dataset.tab;render();});}
+  w.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{w.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");currentTab=el.dataset.tab;currentAgent=null;render();});}
 function start(){
   document.getElementById("foot").innerHTML=`ISA pool = 5% of sourced GCI · closer 2.5% + manager (Kahla) 2.5% override · Kahla keeps 5% on her own deals.<br>Data as of ${DATA.asOf}. Office = SISU non-rental sales; ISA-sourced via FUB Converted tags → SISU by address.`;
   buildTabs();document.getElementById("periodSel").onchange=render;
