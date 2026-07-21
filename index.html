@@ -175,8 +175,22 @@ let charts=[];const clr=()=>{charts.forEach(c=>c.destroy());charts=[];};
 const grid="rgba(147,160,189,.12)",tick="#93a0bd";
 let currentTab="Office";
 let currentAgent=null;
+let currentISA=null;   // drilldown within the ISA Team tab
 let agentView="full";  // 'full' (detailed rows) or 'cards' (icon metrics)
 let dispMode="pct";    // 'pct' (percentages) or 'num' (exact numbers/$)
+let isaSort={key:'inc',dir:-1};      // ISA Team scorecard sort state
+let agentSort={key:'closed',dir:-1}; // Agent Insights scorecard sort state
+/* sortable-table helpers */
+function sortHdr(key,label,cls,state){const active=state.key===key;const arw=active?(state.dir<0?' ▼':' ▲'):'';
+  return `<th class="${cls||''}" data-sk="${key}" style="cursor:pointer;user-select:none"${active?' data-active="1"':''}>${label}${arw}</th>`;}
+function applySort(list,state,acc){const f=acc[state.key];if(!f)return list;
+  return list.slice().sort((a,b)=>{const va=f(a),vb=f(b);
+    if(typeof va==='string')return va.localeCompare(vb)*state.dir;
+    return ((va||0)-(vb||0))*state.dir;});}
+function bindSortHeaders(sel,state){document.querySelectorAll(sel+" th[data-sk]").forEach(th=>th.onclick=(e)=>{
+  e.stopPropagation();const k=th.dataset.sk;
+  if(state.key===k)state.dir*=-1; else {state.key=k;state.dir=(k==='name')?1:-1;}
+  render();});}
 
 function render(){
   const id=document.getElementById("periodSel").value;
@@ -186,7 +200,8 @@ function render(){
   clr();
   if(currentTab==="Office")renderOffice(keys,id);
   else if(currentTab==="Agents"){ currentAgent?renderAgentDetail(currentAgent,keys):renderAgents(keys); }
-  else renderISA(currentTab,keys,id);
+  else if(currentTab==="ISATeam"){ currentISA?renderISA(currentISA,keys,id):renderISATeam(keys,id); }
+  else renderOffice(keys,id);
 }
 
 function renderOffice(keys,id){
@@ -348,9 +363,62 @@ function drawSourceTrend(){
       scales:{x:{grid:{color:grid},ticks:{color:tick}},y:{grid:{color:grid},ticks:{color:tick,precision:0},title:{display:true,text:"Closings",color:tick}}}}}));
 }
 
+/* ===== ISA Team overview scorecard ===== */
+function isaAgg(keys){
+  const D=DATA.dsAll;
+  return DATA.isaNames.map(name=>{
+    const mask=maskFor(name);
+    const rows=D.leads.filter(L=>(L[0]&mask)!==0);
+    const cohort=rows.filter(L=>inKeys(L[1],keys));
+    let contacted=0,apptPlus=0,metPlus=0,closed=0;
+    cohort.forEach(L=>{if(L[5])contacted++;const rk=STAGE_RANK[D.stageList[L[3]].toLowerCase()];if(rk>=3)apptPlus++;if(rk>=4)metPlus++;});
+    rows.filter(L=>L[7]===1&&inKeys(L[6],keys)).forEach(()=>closed++);
+    const leads=cohort.length, s=isaSum(name,keys), gci=s.sale_g+s.rent_g, inc=isaIncome(name,keys);
+    return {name,leads,contacted,apptPlus,metPlus,closed,
+      contact:safe(contacted,leads),appt:safe(apptPlus,leads),met:safe(metPlus,apptPlus),close:safe(closed,metPlus),
+      sales:s.sale_u,vol:s.sale_v,gci,inc};
+  });
+}
+function renderISATeam(keys,id){
+  if(!keys[0].startsWith("2026")){
+    document.getElementById("view").innerHTML=`<div class="panel"><span class="sub">ISA team data is available for 2026 periods. Switch to a 2026 period to view.</span></div>`;return;}
+  const P=dispMode==='pct';
+  const acc={name:r=>r.name,leads:r=>r.leads,contact:r=>r.contact,appt:r=>r.appt,met:r=>r.met,close:r=>r.close,sales:r=>r.sales,gci:r=>r.gci,inc:r=>r.inc};
+  const list=applySort(isaAgg(keys),isaSort,acc);
+  const best=k=>Math.max(...list.map(r=>r[k]),0);
+  const bC=best('contact'),bA=best('appt'),bM=best('met'),bCl=best('close');
+  const hl=(v,b)=>v>=b&&b>0?' style="color:#4ade80;font-weight:700"':'';
+  const cH=P?['Contact%','→Appt%','Appt→Met%','Met→Close%']:['Contacted','Reached appt','Met','Closed'];
+  const body=list.map(r=>`<tr class="isarow" data-isa="${encodeURIComponent(r.name)}" style="cursor:pointer">
+    <td><span class="dot" style="background:${ISA_HEX[r.name]||'var(--accent)'}"></span>${r.name}${r.name===DATA.comp.manager?' <span class="sub">(mgr)</span>':''} <span class="sub">›</span></td>
+    <td class="num">${fmt(r.leads)}</td>
+    <td class="num"${hl(r.contact,bC)}>${P?pct(r.contact):fmt(r.contacted)}</td>
+    <td class="num"${hl(r.appt,bA)}>${P?pct(r.appt):fmt(r.apptPlus)}</td>
+    <td class="num"${hl(r.met,bM)}>${P?pct(r.met):fmt(r.metPlus)}</td>
+    <td class="num"${hl(r.close,bCl)}>${P?pct(r.close):fmt(r.closed)}</td>
+    <td class="num">${fmt(r.sales)}</td><td class="num">${money(r.gci)}</td><td class="num">${money(r.inc)}</td></tr>`).join("");
+  const H=(k,l,c)=>sortHdr(k,l,c,isaSort);
+  const table=`<div style="overflow-x:auto"><table id="isaScore"><thead><tr>${H('name','ISA','')}${H('leads',scopeMode==='isa'?'ISA leads':'Leads','num')}${H('contact',cH[0],'num')}${H('appt',cH[1],'num')}${H('met',cH[2],'num')}${H('close',cH[3],'num')}${H('sales','Sourced sales','num')}${H('gci','Sourced GCI','num')}${H('inc','Income','num')}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="sub" style="margin-top:8px">Click any ISA for their full dashboard, goals &amp; forecast. Green = best on that metric. Click a column header to sort. Leads &amp; conversion columns are period-aware (FUB converted-lead pipeline); <b>Sourced sales / GCI / Income</b> are SISU production for the period per the comp plan.</div>`;
+  let tL=0,tSales=0,tGci=0,tInc=0;list.forEach(r=>{tL+=r.leads;tSales+=r.sales;tGci+=r.gci;tInc+=r.inc;});
+  const off=officeSum(keys);
+  const teamCards=cardsHTML([
+    {label:"ISA sourced sales",value:fmt(tSales),sub:pct(safe(tSales,off.units))+" of office units"},
+    {label:"ISA sourced GCI",value:money(tGci),sub:pct(safe(tGci,off.gci))+" of office GCI"},
+    {label:"ISA leads (period)",value:fmt(tL)},
+    {label:"Income to ISA team",value:money(tInc),sub:"per comp plan"},
+  ]);
+  document.getElementById("view").innerHTML=`
+    <div class="banner" style="margin-top:0">ISA team overview — ${DATA.isaNames.join(", ")}. Cohort follows the period selector (top right). Click a name for their full dashboard.</div>
+    ${teamCards}
+    <div class="panel"><h2>ISA scorecard <span class="hint">click a column to sort · click a row for detail</span></h2>${table}</div>`;
+  document.querySelectorAll(".isarow").forEach(el=>el.onclick=()=>{currentISA=decodeURIComponent(el.dataset.isa);render();});
+  bindSortHeaders("#isaScore",isaSort);
+}
 function renderISA(name,keys,id){
   if(!keys[0].startsWith("2026")){
-    document.getElementById("view").innerHTML=`<div class="panel"><span class="sub">${name}'s data is available for 2026 periods. Switch to a 2026 period to view.</span></div>`;return;}
+    document.getElementById("view").innerHTML=`<div style="margin-bottom:12px"><button class="btn ghost" id="isaBack">← Back to ISA Team</button></div><div class="panel"><span class="sub">${name}'s data is available for 2026 periods. Switch to a 2026 period to view.</span></div>`;
+    const bk=document.getElementById("isaBack");if(bk)bk.onclick=()=>{currentISA=null;render();};return;}
   const s=isaSum(name,keys), off=officeSum(keys);
   const gci=s.sale_g+s.rent_g, inc=isaIncome(name,keys), g=goalsFor(name);
   const isMgr=name===DATA.comp.manager;
@@ -449,7 +517,10 @@ function renderISA(name,keys,id){
       </div></div>`;
   }
   const anPanels=analyticsPanels(maskFor(name),keys);
-  document.getElementById("view").innerHTML=`${cards}
+  const isaHdr=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn ghost" id="isaBack">← Back to ISA Team</button>
+      <h2 style="margin:0"><span class="dot" style="background:${ISA_HEX[name]||'var(--accent)'}"></span>${name} <span class="sub" style="font-weight:400">· ISA dashboard</span></h2></div>`;
+  document.getElementById("view").innerHTML=`${isaHdr}${cards}
     ${pipeline}
     ${forecast}
     ${anPanels}
@@ -457,6 +528,7 @@ function renderISA(name,keys,id){
       <div class="panel"><h2>${name} — monthly sourced GCI &amp; income <span class="hint">2026</span></h2><div class="chartbox"><canvas id="im"></canvas></div></div>
       <div class="panel"><h2>Goals vs actuals <span class="hint">white mark = goal</span></h2>${paceHTML}<hr style="border-color:var(--line);margin:16px 0">${editor}</div>
     </div>`;
+  const isaBk=document.getElementById("isaBack");if(isaBk)isaBk.onclick=()=>{currentISA=null;render();};
   document.getElementById("sg").onclick=()=>{const o={};document.querySelectorAll("[data-gk]").forEach(i=>o[i.dataset.gk]=parseFloat(i.value)||0);saveGoals(name,o);toast("Goals saved");render();};
   document.getElementById("rg").onclick=()=>{const a=loadGoals();delete a[name];localStorage.setItem(GKEY,JSON.stringify(a));toast("Reset");render();};
   if(base) bindForecast(base);
@@ -593,23 +665,27 @@ function agentAgg(keys){
     appt:safe(v.apptPlus,v.leads),met:safe(v.metPlus,v.apptPlus),close:safe(v.closed,v.metPlus)}));
 }
 function renderAgents(keys){
-  let list=agentAgg(keys).filter(r=>r.leads>=5||r.closed>0).sort((a,b)=>b.closed-a.closed||b.leads-a.leads);
+  let list=agentAgg(keys).filter(r=>r.leads>=5||r.closed>0);
+  list.forEach(r=>{const p=agentProdSum(r.name,keys);r.pu=p.u;r.pg=p.g;r.ep=expPaidSum(r.name,keys);});
+  const acc={name:r=>r.name,leads:r=>r.leads,contact:r=>r.contact,appt:r=>r.appt,met:r=>r.met,close:r=>r.close,closed:r=>r.closed,pu:r=>r.pu,pg:r=>r.pg,ep:r=>r.ep};
+  list=applySort(list,agentSort,acc);
   const real=list.filter(r=>r.name!=='Deb Bly Team'&&r.name!=='(unassigned)');
   const best=k=>Math.max(...real.map(r=>r[k]),0);
   const bC=best('contact'),bA=best('appt'),bM=best('met'),bCl=best('close'),bClo=best('closed');
   const hl=(v,b)=>v>=b&&b>0?' style="color:#4ade80;font-weight:700"':'';
   const P=dispMode==='pct';
-  const body=list.map(r=>{const p=agentProdSum(r.name,keys),ep=expPaidSum(r.name,keys);
+  const body=list.map(r=>{
     return `<tr class="agrow" data-agent="${encodeURIComponent(r.name)}" style="cursor:pointer">
     <td>${r.name}${r.name==='Deb Bly Team'?' <span class="sub">(shared)</span>':''} <span class="sub">›</span></td>
     <td class="num">${fmt(r.leads)}</td><td class="num"${hl(r.contact,bC)}>${P?pct(r.contact):fmt(r.contacted)}</td>
     <td class="num"${hl(r.appt,bA)}>${P?pct(r.appt):fmt(r.apptPlus)}</td><td class="num"${hl(r.met,bM)}>${P?pct(r.met):fmt(r.metPlus)}</td>
     <td class="num"${hl(r.close,bCl)}>${P?pct(r.close):fmt(r.closed)}</td><td class="num"${hl(r.closed,bClo)}>${fmt(r.closed)}</td>
-    <td class="num">${p.u?fmt(p.u):'–'}</td><td class="num">${p.g?money(p.g):'–'}</td>
-    <td class="num">${ep?money(ep):'–'}</td></tr>`;}).join("");
+    <td class="num">${r.pu?fmt(r.pu):'–'}</td><td class="num">${r.pg?money(r.pg):'–'}</td>
+    <td class="num">${r.ep?money(r.ep):'–'}</td></tr>`;}).join("");
   const leadHdr=scopeMode==='isa'?'ISA leads':'Leads', closeHdr=scopeMode==='isa'?'ISA closings':'Closings';
   const cH=P?['Contact%','→Appt%','Appt→Met%','Met→Close%']:['Contacted','Reached appt','Met','Closed'];
-  const table=`<div style="overflow-x:auto"><table><thead><tr><th>Sales agent</th><th class="num">${leadHdr}</th><th class="num">${cH[0]}</th><th class="num">${cH[1]}</th><th class="num">${cH[2]}</th><th class="num">${cH[3]}</th><th class="num">${closeHdr}</th><th class="num">Total closings</th><th class="num">Total GCI</th><th class="num">Paid to eXp</th></tr></thead><tbody>${body}</tbody></table></div>
+  const AH=(k,l,c)=>sortHdr(k,l,c,agentSort);
+  const table=`<div style="overflow-x:auto"><table id="agentScore"><thead><tr>${AH('name','Sales agent','')}${AH('leads',leadHdr,'num')}${AH('contact',cH[0],'num')}${AH('appt',cH[1],'num')}${AH('met',cH[2],'num')}${AH('close',cH[3],'num')}${AH('closed',closeHdr,'num')}${AH('pu','Total closings','num')}${AH('pg','Total GCI','num')}${AH('ep','Paid to eXp','num')}</tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px">Click any agent for their dashboard. Green = best on that metric. <b>Total closings/GCI</b> = all their SISU deals in the period (all sources). The leads/conversion columns follow the <b>${scopeMode==='isa'?'ISA-Converted':'All Agents'}</b> toggle.</div>`;
   const coach=[];
   real.filter(r=>r.leads>=10).forEach(r=>{const iss=[];
@@ -627,6 +703,7 @@ function renderAgents(keys){
     <div class="two"><div class="panel"><h2>⭐ Strengths</h2>${starHTML}</div>
       <div class="panel"><h2>🎯 Needs coaching</h2>${coachHTML}</div></div>`;
   document.querySelectorAll(".agrow").forEach(el=>el.onclick=()=>{currentAgent=decodeURIComponent(el.dataset.agent);render();});
+  bindSortHeaders("#agentScore",agentSort);
 }
 function agentPlanner(name,b){
   const sl=(id,lbl,val,unit,mn,mx,st)=>`<div class="slider"><div class="row"><span class="sub">${lbl}</span><span class="v" id="v_${id}">${val}${unit||''}</span></div>
@@ -816,9 +893,9 @@ function drawISA(name){const ctx=document.getElementById("im");if(!ctx)return;
 
 /* ===== shell ===== */
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1600);}
-function buildTabs(){const tabs=[["Office","Office / Team"],...DATA.isaNames.map(n=>[n,n]),["Agents","Agent Insights"]];const w=document.getElementById("tabs");
+function buildTabs(){const tabs=[["Office","Office / Team"],["ISATeam","ISA Team"],["Agents","Agent Insights"]];const w=document.getElementById("tabs");
   w.innerHTML=tabs.map(([id,lbl],i)=>`<div class="tab${i===0?' active':''}" data-tab="${id}">${lbl}</div>`).join("");
-  w.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{w.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");currentTab=el.dataset.tab;currentAgent=null;render();});}
+  w.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{w.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");currentTab=el.dataset.tab;currentAgent=null;currentISA=null;render();});}
 function start(){
   document.getElementById("foot").innerHTML=`ISA pool = 5% of sourced GCI · closer 2.5% + manager (Kahla) 2.5% override · Kahla keeps 5% on her own deals.<br>Data as of ${DATA.asOf}. Office = SISU non-rental sales; ISA-sourced via FUB Converted tags → SISU by address.`;
   buildTabs();document.getElementById("periodSel").onchange=render;
