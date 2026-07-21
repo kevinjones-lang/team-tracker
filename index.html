@@ -472,8 +472,8 @@ function renderAgents(keys){
     <td class="num"${hl(r.appt,bA)}>${pct(r.appt)}</td><td class="num"${hl(r.met,bM)}>${pct(r.met)}</td>
     <td class="num"${hl(r.close,bCl)}>${pct(r.close)}</td><td class="num"${hl(r.closed,bClo)}>${fmt(r.closed)}</td>
     <td class="num">${p.u?fmt(p.u):'–'}</td><td class="num">${p.g?money(p.g):'–'}</td></tr>`;}).join("");
-  const scLbl=scopeMode==='isa'?'ISA':'Lead';
-  const table=`<div style="overflow-x:auto"><table><thead><tr><th>Sales agent</th><th class="num">${scLbl} leads</th><th class="num">Contact%</th><th class="num">→Appt%</th><th class="num">Appt→Met%</th><th class="num">Met→Close%</th><th class="num">${scLbl} closings</th><th class="num">Total closings</th><th class="num">Total GCI</th></tr></thead><tbody>${body}</tbody></table></div>
+  const leadHdr=scopeMode==='isa'?'ISA leads':'Leads', closeHdr=scopeMode==='isa'?'ISA closings':'Closings';
+  const table=`<div style="overflow-x:auto"><table><thead><tr><th>Sales agent</th><th class="num">${leadHdr}</th><th class="num">Contact%</th><th class="num">→Appt%</th><th class="num">Appt→Met%</th><th class="num">Met→Close%</th><th class="num">${closeHdr}</th><th class="num">Total closings</th><th class="num">Total GCI</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px">Click any agent for their dashboard. Green = best on that metric. <b>Total closings/GCI</b> = all their SISU deals in the period (all sources). The leads/conversion columns follow the <b>${scopeMode==='isa'?'ISA-Converted':'All Agents'}</b> toggle.</div>`;
   const coach=[];
   real.filter(r=>r.leads>=10).forEach(r=>{const iss=[];
