@@ -431,7 +431,8 @@ function renderISA(name,keys,id){
     {label:"Sales GCI",value:money(s.sale_g)},
     {label:"Lease deals",value:fmt(s.rent_u),sub:`${money(s.rent_g)} GCI`},
     {label:"Total sourced GCI",value:money(gci),sub:"sales + leases"},
-    {label:"CO$ to team",value:money(s.co),sub:`${pct(safe(s.co,s.sale_g))} of sales GCI · eXp team split`},
+    {label:"CO$ to team",value:money(s.co),sub:`${pct(safe(s.co,s.sale_g))} of sales GCI · team's share`},
+    {label:"To closing agent",value:money(Math.max(0,s.sale_g-s.co)),sub:`${pct(safe(s.sale_g-s.co,s.sale_g))} of sales GCI · agent's share`},
     {label:"Your income",value:money(inc),sub:isMgr?"5% own + 2.5% override":"2.5% of GCI"},
   ]);
   // goals vs actuals
@@ -801,7 +802,8 @@ function renderAgentDetail(name,keys){
     {label:"Total closings",value:fmt(prod.u),delta:deltaHTML(growth(prod.u,prodPrev.u))},
     {label:"Total volume",value:money(prod.v),delta:deltaHTML(growth(prod.v,prodPrev.v))},
     {label:"Total GCI",value:money(prod.g),delta:deltaHTML(growth(prod.g,prodPrev.g))},
-    {label:"GCI to team (CO$)",value:money(agCo),sub:pct(safe(agCo,prod.g))+" of GCI · team-leader split"},
+    {label:"GCI to team (CO$)",value:money(agCo),sub:pct(safe(agCo,prod.g))+" of GCI · team's share"},
+    {label:"Agent share (GCI)",value:money(Math.max(0,prod.g-agCo)),sub:pct(safe(prod.g-agCo,prod.g))+" of GCI · agent's side"},
     {label:"Avg GCI / closing",value:money(safe(prod.g,prod.u)),sub:"all sources"},
     {label:"Paid to eXp",value:money(expPaidSum(name,keys)),sub:"company commission"},
   ]):`<div class="banner" style="margin-top:0">No SISU closed production matched for ${name} in this period (name may differ between systems, or no closings yet).</div>`;
@@ -811,7 +813,7 @@ function renderAgentDetail(name,keys){
   const calcPanel=agentPlanner(name,planBase);
   const iconCards=cardsHTML([
     {label:"🏠 Total closings",value:fmt(prod.u)},{label:"💰 Total GCI",value:money(prod.g)},
-    {label:"🏦 GCI to team (CO$)",value:money(agCo)},
+    {label:"🏦 GCI to team (CO$)",value:money(agCo)},{label:"👤 Agent share",value:money(Math.max(0,prod.g-agCo))},
     {label:"📈 Volume",value:money(prod.v)},{label:"🏢 Paid to eXp",value:money(expPaidSum(name,keys))},
     {label:"🎯 Leads",value:fmt(cohort.length)},{label:"📞 Contact rate",value:pct(contactRate)},
     {label:"🤝 Met→Close",value:pct(metClose)},{label:"✅ Closings ("+(scopeMode==='isa'?'ISA':'all')+")",value:fmt(clP.length)},
