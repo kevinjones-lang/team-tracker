@@ -253,6 +253,32 @@ function teamScorecard(){
     <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">YoY</th><th class="num">2025 total</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px"><span style="background:#22c55e;color:#04220f;padding:1px 6px;border-radius:4px;font-weight:700">green</span> = change ≥ +10%. All figures from the <b>eXp Team report</b> (settled transactions): units are deduped per side, volume is adjusted volume, Company Dollar = team GCI (Bly accounts). <b>Not shown</b> (need other feeds): listings taken, contracts written, pending, referrals, withdrawn, expenses/profit.</div></div>`;
 }
+function isaTeamScorecard(){
+  if(!DATA.isa)return "";
+  const P=metricPeriods();
+  const agg=keys=>{const o={buyU:0,buyV:0,buyG:0,sellU:0,sellV:0,sellG:0,rentU:0,rentG:0,co:0,inc:0};
+    DATA.isaNames.forEach(n=>{const s=isaSum(n,keys);o.buyU+=s.buy_u;o.buyV+=s.buy_v;o.buyG+=s.buy_g;o.sellU+=s.sell_u;o.sellV+=s.sell_v;o.sellG+=s.sell_g;o.rentU+=s.rent_u;o.rentG+=s.rent_g;o.co+=s.co;o.inc+=isaIncome(n,keys);});return o;};
+  const A={mtd:agg(P.mtd),lm:agg(P.lm),ytd:agg(P.ytd)};
+  const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const chg=(c,p)=>(!p&&p!==0)?null:(p===0?null:(c-p)/Math.abs(p));
+  const chgCell=c=>c===null?'<td class="num sub">—</td>':`<td class="num" style="color:${c>=0.10?'#04220f':'#fff'};background:${c>=0.10?'#22c55e':'#d81b9a'};font-weight:700">${(c*100).toFixed(1)}%</td>`;
+  const na='<td class="num sub">n/a</td>';
+  const rows=[
+    ['Sourced closed units',a=>a.buyU+a.sellU,fmt],['Sourced closed volume',a=>a.buyV+a.sellV,money],
+    ['Buyer-side units',a=>a.buyU,fmt],['Buyer-side volume',a=>a.buyV,money],
+    ['Listings sold',a=>a.sellU,fmt],['Listings sold volume',a=>a.sellV,money],
+    ['Avg price — buyers',a=>safe(a.buyV,a.buyU),money],['Avg price — listings',a=>safe(a.sellV,a.sellU),money],
+    ['Sourced lease deals',a=>a.rentU,fmt],
+    ['Sourced closed GCI',a=>a.buyG+a.sellG,money],['Gross buyers GCI',a=>a.buyG,money],['Gross listing GCI',a=>a.sellG,money],
+    ['CO$ to team',a=>a.co,money],['Income to ISA team',a=>a.inc,money],
+  ];
+  const body=rows.map(([lbl,fn,ff])=>{const vM=fn(A.mtd),vL=fn(A.lm),vY=fn(A.ytd);
+    return `<tr><td>${lbl}</td><td class="num">${ff(vM)}</td><td class="num">${ff(vL)}</td>${chgCell(chg(vM,vL))}<td class="num">${ff(vY)}</td>${na}${na}${na}</tr>`;}).join("");
+  const cM2=MN[P.mn], pM=MN[P.mn>1?P.mn-1:12];
+  return `<div class="panel"><h2>ISA team scorecard <span class="hint">ISA-sourced production · same metrics as the main page · through ${cM2} 2026</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">YoY</th><th class="num">2025 total</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="sub" style="margin-top:8px"><span style="background:#22c55e;color:#04220f;padding:1px 6px;border-radius:4px;font-weight:700">green</span> = change ≥ +10%. ISA-sourced closings (FUB Converted tags → SISU by name/address); CO$ = team GCI on those deals. YoY &amp; 2025 columns are <b>n/a</b> — ISA attribution is 2026-only (FUB keeps each contact's latest deal).</div></div>`;
+}
 function renderOffice(keys,id){
   const off=officeSum(keys), prev=officeSum(keys.map(priorYear));
   const isSales2026=keys[0].startsWith("2026");
@@ -478,7 +504,8 @@ function renderISATeam(keys,id){
   document.getElementById("view").innerHTML=`
     <div class="banner" style="margin-top:0">ISA team overview — ${DATA.isaNames.join(", ")}. Cohort follows the period selector (top right). Click a name for their full dashboard.</div>
     ${teamCards}
-    <div class="panel"><h2>ISA scorecard <span class="hint">click a column to sort · click a row for detail</span></h2>${table}</div>`;
+    <div class="panel"><h2>ISA scorecard <span class="hint">click a column to sort · click a row for detail</span></h2>${table}</div>
+    ${isaTeamScorecard()}`;
   document.querySelectorAll(".isarow").forEach(el=>el.onclick=()=>{currentISA=decodeURIComponent(el.dataset.isa);render();});
   bindSortHeaders("#isaScore",isaSort);
 }
