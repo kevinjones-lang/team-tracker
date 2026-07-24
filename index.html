@@ -231,6 +231,21 @@ function renderOffice(keys,id){
     {label:"🔁 Leases",value:fmt(off.leases),sub:money(off.leaseGci)+" GCI"},
     {label:"📝 Under contract",value:fmt(off.uc),sub:money(off.ucVol)+" vol"},
   ]);
+  // ===== Team vs Agent GCI split (period-aware, from eXp) =====
+  const agentG=Math.max(0,ePaid.gci-ePaid.co);
+  const tPct=safe(ePaid.co,ePaid.gci), aPct=safe(agentG,ePaid.gci);
+  const splitBar=`<div style="display:flex;height:26px;border-radius:8px;overflow:hidden;margin:6px 0 4px;border:1px solid var(--line)">
+     <div style="width:${(tPct*100).toFixed(1)}%;background:var(--good);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#062611">Team ${pct(tPct)}</div>
+     <div style="width:${(aPct*100).toFixed(1)}%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">Agent ${pct(aPct)}</div></div>`;
+  const splitBox=`<div class="panel"><h2>Team vs Agent GCI <span class="hint">eXp settled GCI · follows the period selector</span></h2>
+    ${cardsHTML([
+      {label:"Total GCI",value:money(ePaid.gci),sub:"eXp settled"},
+      {label:"🏦 Team GCI (CO$)",value:money(ePaid.co),sub:pct(tPct)+" · Deborah / Kevin / Mary Bly"},
+      {label:"👤 Agent GCI",value:money(agentG),sub:pct(aPct)+" · producing agents"},
+      {label:"🏢 Paid to eXp",value:money(ePaid.paid),sub:pct(safe(ePaid.paid,ePaid.gci))+" of GCI"},
+    ])}
+    ${splitBar}
+    <div class="sub" style="margin-top:6px">Team GCI = commission on the Bly team-leader accounts; Agent GCI = the producing agents' share. eXp GCI can differ slightly from SISU office GCI above (different systems &amp; timing).</div></div>`;
   let contrib="", dough="";
   if(isSales2026){
     const P=dispMode==='pct';
@@ -260,6 +275,7 @@ function renderOffice(keys,id){
     contrib=`<div class="panel"><span class="sub">ISA-level attribution is available for 2026 only (FUB stores each contact's latest deal). Office production is shown for all periods.</span></div>`;
   }
   document.getElementById("view").innerHTML=`${prodCards}
+    ${splitBox}
     <div class="panel"><h2>Lead pipeline <span class="hint">${scopeLabel()} · leads added in period</span></h2>${circleFunnel(dsAllRows(),keys)}</div>
     <div class="two">
       <div class="panel"><h2>Monthly GCI <span class="hint">2026 vs 2025</span></h2><div class="chartbox"><canvas id="trend"></canvas></div></div>
@@ -320,18 +336,18 @@ function coPanel(keys){
     {label:"GCI (eXp basis)",value:money(e.gci),sub:"period"},
   ]);
   const P=dispMode==='pct';
-  const bs=DATA.co.bySource, tot=DATA.co.totalCO||1;
-  const rows=Object.entries(bs).sort((a,b)=>b[1].co-a[1].co);
-  const body=rows.map(([s,v])=>{const shr=P?pct(v.co/tot):money(v.co)+' of '+money(DATA.co.totalCO),
-      rate=P?pct(safe(v.co,v.gci)):money(v.co)+' / '+money(v.gci);
-    return `<tr><td>${s}</td><td class="num">${money(v.co)}</td>
-    <td class="num">${bar(v.co/tot*100,'var(--good)')}${shr}</td>
-    <td class="num">${money(v.gci)}</td><td class="num">${rate}</td></tr>`;}).join("");
-  const shrH=P?'% of CO$':'CO$ share', rateH=P?'CO$ as % of GCI':'CO$ / GCI';
+  const bs=DATA.co.bySource;
+  const K=keys||[];
+  const coP=s=>Object.entries(bs[s].monthly||{}).reduce((a,[ym,v])=>a+(K.includes(ym)?v:0),0);
+  const rowsA=Object.keys(bs).map(s=>[s,coP(s)]).filter(r=>r[1]>0).sort((a,b)=>b[1]-a[1]);
+  const totP=rowsA.reduce((a,r)=>a+r[1],0)||1;
+  const body=rowsA.map(([s,co])=>{const shr=P?pct(co/totP):money(co)+' of '+money(totP);
+    return `<tr><td>${s}</td><td class="num">${money(co)}</td><td class="num">${bar(co/totP*100,'var(--good)')}${shr}</td></tr>`;}).join("")||`<tr><td colspan="3" class="sub">No CO$ in this period.</td></tr>`;
+  const shrH=P?'% of CO$':'CO$ share';
   return `${econCards}
-    <div class="panel"><h2>Company Dollar (CO$) by lead source <span class="hint">office team-lead split · 2026 · ${money(DATA.co.totalCO)} total</span></h2>
-    <div style="overflow-x:auto"><table><thead><tr><th>Lead source</th><th class="num">Company Dollar</th><th class="num">${shrH}</th><th class="num">GCI</th><th class="num">${rateH}</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="sub" style="margin-top:8px">CO$ = the team/office's commission split (from eXp "Team Leader Commission Splits"), matched to each closing's <b>SISU lead source</b> by address. "Other / unattributed" = closings not matched to a SISU source (incl. leases).</div>
+    <div class="panel"><h2>Company Dollar (CO$) by lead source <span class="hint">team GCI · follows period selector · ${money(totP)} total</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Lead source</th><th class="num">Company Dollar</th><th class="num">${shrH}</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="sub" style="margin-top:8px">CO$ = the team's GCI (Deborah / Kevin / Mary Bly accounts), matched to each closing's <b>SISU lead source</b> by address. "Other / unattributed" = closings not matched to a SISU source (incl. leases).</div>
     <div class="chartbox" style="margin-top:14px"><canvas id="coTrend"></canvas></div></div>
     <div class="panel"><h2>Company economics over time <span class="hint">team · monthly 2026 · CO$ to Deb vs paid to eXp</span></h2><div class="chartbox"><canvas id="expTrend"></canvas></div></div>`;
 }
