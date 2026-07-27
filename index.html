@@ -260,6 +260,33 @@ function teamScorecard(keys){
     <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} ${P.yr} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD ${P.yr}</th><th class="num">YoY '${yy}</th><th class="num">YoY</th><th class="num">${P.yr-1} total</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px"><span style="background:#22c55e;color:#04220f;padding:1px 6px;border-radius:4px;font-weight:700">green</span> = change ≥ +10%. All figures from the <b>eXp Team report</b> (settled transactions): units are deduped per side, volume is adjusted volume, Company Dollar = team GCI (Bly accounts). <b>Not shown</b> (need other feeds): listings taken, contracts written, pending, referrals, withdrawn, expenses/profit.</div></div>`;
 }
+let lbMode='ytd';
+function leaderboardPanel(keys){
+  if(!DATA.agentProd||!DATA.agentProd.monthly)return "";
+  const P=metricPeriods(keys), mon=DATA.agentProd.monthly, disp=DATA.agentProd.disp||{};
+  const curK=lbMode==='mtd'?P.mtd:P.ytd, priK=lbMode==='mtd'?P.mtd.map(priorYear):P.yoy;
+  const sumF=(nm,ks,f)=>{let a=0;ks.forEach(k=>{const x=mon[nm][k];if(x)a+=x[f]||0;});return a;};
+  const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const METR=[['🏠 Closed units','u',fmt],['📈 Closed volume','v',money],['💰 GCI','g',money]];
+  const col=METR.map(([lbl,f,ff])=>{
+    const rows=Object.keys(mon).map(nm=>{const c=sumF(nm,curK,f),pr=sumF(nm,priK,f);
+      return {nm:disp[nm]||nm,c,pr,g:(pr>0&&c>0)?(c-pr)/pr:null};})
+      .filter(r=>r.g!==null).sort((a,b)=>b.g-a.g).slice(0,5);
+    const body=rows.map((r,i)=>`<tr class="lbrow" data-agent="${encodeURIComponent(r.nm)}" style="cursor:pointer">
+      <td class="sub" style="width:18px">${i+1}</td><td>${r.nm} <span class="sub">›</span></td>
+      <td class="num" style="color:${r.g>=0?'#4ade80':'#f87171'};font-weight:700">${r.g>=0?'+':''}${(r.g*100).toFixed(0)}%</td>
+      <td class="num sub">${ff(r.c)}<br><span style="opacity:.6">was ${ff(r.pr)}</span></td></tr>`).join("")
+      ||`<tr><td colspan="4" class="sub">No agents with prior-year ${lbl.replace(/^[^ ]+ /,'')} to compare.</td></tr>`;
+    return `<div class="panel" style="margin:0"><h2 style="font-size:15px">${lbl}</h2>
+      <table><thead><tr><th class="sub">#</th><th>Agent</th><th class="num">Growth</th><th class="num">Now / prior</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }).join("");
+  const basis=lbMode==='mtd'?`${MN[P.mn]} ${P.yr} vs ${MN[P.mn]} ${P.yr-1}`:`YTD ${P.yr} vs YTD ${P.yr-1} (Jan–${MN[P.mn]})`;
+  const tog=`<span id="lbTog" class="scopetog" style="margin-left:10px;vertical-align:middle">
+    <button data-lb="mtd"${lbMode==='mtd'?' class="on"':''}>MTD</button><button data-lb="ytd"${lbMode==='ytd'?' class="on"':''}>YTD</button></span>`;
+  return `<div class="panel"><h2>🏆 Growth leaderboard ${tog}<span class="hint" style="display:block;margin-top:4px">top 5 agents by year-over-year growth · ${basis} · per-agent SISU production (all sources)</span></h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:10px">${col}</div>
+    <div class="sub" style="margin-top:8px">Ranked by % growth vs the same period last year; only agents with prior-year production in that metric are eligible. Click an agent for their dashboard.</div></div>`;
+}
 function felloPanel(keys,filterFn,opts){
   const F=DATA.fello; if(!F)return "";
   opts=opts||{};
@@ -402,6 +429,7 @@ function renderOffice(keys,id){
     ${splitBox}
     ${upcomingPanel()}
     ${teamScorecard(keys)}
+    ${leaderboardPanel(keys)}
     <div class="panel"><h2>Lead pipeline <span class="hint">${scopeLabel()} · leads added in period</span></h2>${circleFunnel(dsAllRows(),keys)}</div>
     <div class="two">
       <div class="panel"><h2>Monthly GCI <span class="hint">2026 vs 2025</span></h2><div class="chartbox"><canvas id="trend"></canvas></div></div>
@@ -420,6 +448,11 @@ function renderOffice(keys,id){
   drawExpTrend();
   const bsm=document.getElementById("boardSelMonth");if(bsm)bsm.onchange=e=>{boardSel=e.target.value;render();};
   bindSrcPopup(keys,L=>scopeMode==='isa'?L[0]>0:true);
+  document.querySelectorAll("#lbTog button").forEach(b=>b.onclick=()=>{lbMode=b.dataset.lb;render();});
+  document.querySelectorAll("#view .lbrow").forEach(el=>el.onclick=()=>{
+    currentTab='Agents';currentAgent=decodeURIComponent(el.dataset.agent);
+    document.querySelectorAll("#tabs .tab").forEach(t=>t.classList.toggle("active",t.dataset.tab==='Agents'));
+    render();});
 }
 /* ===== SISU-style circle funnel (from FUB lead pipeline) ===== */
 function funnelCounts(rows,keys){
