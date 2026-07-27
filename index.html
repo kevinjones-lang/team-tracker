@@ -188,6 +188,7 @@ let currentAgent=null;
 let currentISA=null;   // drilldown within the ISA Team tab
 let agentView="full";  // 'full' (detailed rows) or 'cards' (icon metrics)
 let dispMode="pct";    // 'pct' (percentages) or 'num' (exact numbers/$)
+let boardMonth=false;  // Closings pipeline board: false=All, true=this month only
 let isaSort={key:'inc',dir:-1};      // ISA Team scorecard sort state
 let agentSort={key:'closed',dir:-1}; // Agent Insights scorecard sort state
 /* sortable-table helpers */
@@ -255,19 +256,25 @@ function teamScorecard(){
 }
 function upcomingPanel(){
   const U=DATA.upcoming; if(!U||!U.deals||!U.deals.length)return "";
-  const withP=U.deals.filter(d=>d.price>0);
-  const totGci=U.deals.reduce((a,d)=>a+d.gci,0), totVol=withP.reduce((a,d)=>a+d.price,0), totTeam=U.deals.reduce((a,d)=>a+(d.teamGci||0),0);
-  const rows=U.deals.map(d=>`<tr><td>${d.d||'—'}</td><td>${d.addr}</td><td>${d.agent}</td><td class="sub">${d.src||''}</td>
-    <td class="num">${d.price?money(d.price):'—'}</td><td class="num">${d.gci?money(d.gci):'—'}</td><td class="num" style="color:var(--good)">${d.teamGci?money(d.teamGci):'—'}</td></tr>`).join("");
-  return `<div class="panel"><h2>📋 Closings pipeline board <span class="hint">${U.label} · ${U.deals.length} projected closings</span></h2>
+  const cur=(DATA.metrics?metricPeriods().mn:new Date().getMonth()+1);
+  const MN=["","January","February","March","April","May","June","July","August","September","October","November","December"];
+  const dmonth=s=>{const m=/(\d{1,2})\/\d{1,2}/.exec(s||'');return m?+m[1]:null;};
+  const deals=boardMonth?U.deals.filter(d=>dmonth(d.d)===cur):U.deals;
+  const withP=deals.filter(d=>d.price>0);
+  const totGci=deals.reduce((a,d)=>a+d.gci,0), totVol=withP.reduce((a,d)=>a+d.price,0), totTeam=deals.reduce((a,d)=>a+(d.teamGci||0),0);
+  const rows=deals.map(d=>`<tr><td>${d.d||'—'}</td><td>${d.addr}</td><td>${d.agent}</td><td class="sub">${d.src||''}</td>
+    <td class="num">${d.price?money(d.price):'—'}</td><td class="num">${d.gci?money(d.gci):'—'}</td><td class="num" style="color:var(--good)">${d.teamGci?money(d.teamGci):'—'}</td></tr>`).join("")||`<tr><td colspan="7" class="sub">No closings scheduled for ${MN[cur]}.</td></tr>`;
+  const scope=boardMonth?`${MN[cur]} closings`:U.label;
+  return `<div class="panel"><h2>📋 Closings pipeline board
+      <span id="boardTog" class="scopetog" style="margin-left:10px;vertical-align:middle"><button data-bm="all"${!boardMonth?' class="on"':''}>All (${U.deals.length})</button><button data-bm="month"${boardMonth?' class="on"':''}>This month (${U.deals.filter(d=>dmonth(d.d)===cur).length})</button></span></h2>
     ${cardsHTML([
-      {label:"Projected closings",value:fmt(U.deals.length),sub:U.label},
+      {label:"Projected closings",value:fmt(deals.length),sub:scope},
       {label:"Est. volume",value:money(totVol),sub:`${fmt(withP.length)} with price`},
       {label:"Est. GCI",value:money(totGci),sub:"~3% of price"},
       {label:"🏦 Est. Team GCI",value:money(totTeam),sub:"CO$ · per-agent split"},
     ])}
     <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Close</th><th>Property</th><th>Agent</th><th>Source</th><th class="num">List price</th><th class="num">Est. GCI</th><th class="num">Est. Team GCI</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="sub" style="margin-top:8px">From the <b>Closings Board</b> (Google Sheet). GCI estimated at ~3% of list price; <b>Team GCI</b> (CO$) estimated from each closing agent's historical team-split ratio (Deb's own production counts fully to the team). Projected, not settled — they roll into the scorecard once they close in the eXp report.</div></div>`;
+    <div class="sub" style="margin-top:8px">From the <b>Closings Board</b> (Google Sheet). Toggle <b>This month</b> to see just ${MN[cur]}'s closings &amp; total. GCI estimated at ~3% of list price; <b>Team GCI</b> (CO$) from each agent's historical team-split (Deb's own production counts fully to the team). Projected, not settled.</div></div>`;
 }
 function isaTeamScorecard(){
   if(!DATA.isa)return "";
@@ -378,6 +385,7 @@ function renderOffice(keys,id){
   drawSourceTrend();
   drawCoTrend();
   drawExpTrend();
+  document.querySelectorAll("#boardTog button").forEach(b=>b.onclick=()=>{boardMonth=b.dataset.bm==='month';render();});
 }
 /* ===== SISU-style circle funnel (from FUB lead pipeline) ===== */
 function funnelCounts(rows,keys){
