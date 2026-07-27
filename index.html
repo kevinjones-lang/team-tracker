@@ -141,6 +141,7 @@ const safe=(a,b)=>b>0?a/b:0;
 const ALL_MONTHS=(()=>{const a=[];for(let y=2024;y<=2026;y++)for(let m=1;m<=12;m++)a.push(`${y}-${String(m).padStart(2,'0')}`);return a.filter(k=>k<="2026-07");})();
 function lastN(n){return ALL_MONTHS.slice(-n);}
 function monthsFor(id){
+  if(id&&id.slice(0,2)==="m:")return [id.slice(2)];
   const M=y=>[...Array(12)].map((_,i)=>`${y}-${String(i+1).padStart(2,'0')}`);
   const y26=M(2026).filter(k=>k<="2026-07");
   if(id==="mtd")return ["2026-07"];
@@ -207,7 +208,9 @@ function bindSortHeaders(sel,state){document.querySelectorAll(sel+" th[data-sk]"
 function render(){
   const id=document.getElementById("periodSel").value;
   const keys=monthsFor(id);
-  const label={mtd:"This month (Jul 2026)",lastMonth:"Last month (Jun 2026)",ytd:"Year to date 2026",l3:"Last 3 months",l6:"Last 6 months",l12:"Last 12 months",lastYear:"Last year (2025)"}[id]||id;
+  const MNL=["","January","February","March","April","May","June","July","August","September","October","November","December"];
+  const mlab=(id&&id.slice(0,2)==="m:")?`${MNL[+id.slice(7)]} ${id.slice(2,6)}`:null;
+  const label=mlab||{mtd:"This month (Jul 2026)",lastMonth:"Last month (Jun 2026)",ytd:"Year to date 2026",l3:"Last 3 months",l6:"Last 6 months",l12:"Last 12 months",lastYear:"Last year (2025)"}[id]||id;
   document.getElementById("rangeLabel").textContent=label+" · "+keys[0]+" → "+keys[keys.length-1];
   clr();
   if(currentTab==="Office")renderOffice(keys,id);
@@ -219,17 +222,19 @@ function render(){
 /* ===== Team scorecard (SISU-style MTD/MoM/YTD/YoY metrics) ===== */
 function metricAgg(keys){const M=DATA.metrics||{};const o={buyU:0,buyV:0,buyG:0,sellU:0,sellV:0,sellG:0,rentU:0,rentV:0,rentG:0};const ags=new Set();
   keys.forEach(k=>{const m=M[k];if(m){for(const fld in o)o[fld]+=m[fld]||0;(m.ag||[]).forEach(i=>ags.add(i));}});o.agents=ags.size;return o;}
-function metricPeriods(){
-  const ms=Object.keys(DATA.metrics||{}).filter(k=>k.startsWith('2026')).sort();
-  const cur=ms[ms.length-1]||'2026-07', mn=+cur.slice(5);
-  const prevM=mn>1?`2026-${String(mn-1).padStart(2,'0')}`:'2025-12';
+function metricPeriods(keys){
+  let cur;
+  if(keys&&keys.length){cur=keys[keys.length-1];}
+  else {const ms=Object.keys(DATA.metrics||{}).sort();cur=ms[ms.length-1]||'2026-07';}
+  const yr=+cur.slice(0,4), mn=+cur.slice(5);
+  const prevM=mn>1?`${yr}-${String(mn-1).padStart(2,'0')}`:`${yr-1}-12`;
   const ytd=[],yoy=[],y25=[];
-  for(let i=1;i<=mn;i++){ytd.push(`2026-${String(i).padStart(2,'0')}`);yoy.push(`2025-${String(i).padStart(2,'0')}`);}
-  for(let i=1;i<=12;i++)y25.push(`2025-${String(i).padStart(2,'0')}`);
-  return {cur,mn,prevM,mtd:[cur],lm:[prevM],ytd,yoy,y25};}
-function teamScorecard(){
+  for(let i=1;i<=mn;i++){ytd.push(`${yr}-${String(i).padStart(2,'0')}`);yoy.push(`${yr-1}-${String(i).padStart(2,'0')}`);}
+  for(let i=1;i<=12;i++)y25.push(`${yr-1}-${String(i).padStart(2,'0')}`);
+  return {cur,mn,yr,prevM,mtd:[cur],lm:[prevM],ytd,yoy,y25};}
+function teamScorecard(keys){
   if(!DATA.metrics)return "";
-  const P=metricPeriods();
+  const P=metricPeriods(keys);
   const A={mtd:metricAgg(P.mtd),lm:metricAgg(P.lm),ytd:metricAgg(P.ytd),yoy:metricAgg(P.yoy),y25:metricAgg(P.y25)};
   const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const chg=(c,p)=>(!p&&p!==0)?null:(p===0?null:(c-p)/Math.abs(p));
@@ -250,9 +255,9 @@ function teamScorecard(){
   body+=`<tr style="font-weight:700"><td>Company Dollar (team GCI)</td><td class="num">${money(cM)}</td><td class="num">${money(cL)}</td>${chgCell(chg(cM,cL))}<td class="num">${money(cY)}</td><td class="num">${money(cO)}</td>${chgCell(chg(cY,cO))}<td class="num">${money(c25)}</td></tr>`;
   const vM=avol(P.mtd),vL=avol(P.lm),vY=avol(P.ytd),vO=avol(P.yoy),v25=avol(P.y25);
   body+=`<tr><td>eXp adjusted volume</td><td class="num">${money(vM)}</td><td class="num">${money(vL)}</td>${chgCell(chg(vM,vL))}<td class="num">${money(vY)}</td><td class="num">${money(vO)}</td>${chgCell(chg(vY,vO))}<td class="num">${money(v25)}</td></tr>`;
-  const cM2=MN[P.mn], pM=MN[P.mn>1?P.mn-1:12];
-  return `<div class="panel"><h2>Team scorecard <span class="hint">eXp settled production + company dollar · through ${cM2} 2026</span></h2>
-    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">YoY</th><th class="num">2025 total</th></tr></thead><tbody>${body}</tbody></table></div>
+  const cM2=MN[P.mn], pM=MN[P.mn>1?P.mn-1:12], yy=String(P.yr-1).slice(2);
+  return `<div class="panel"><h2>Team scorecard <span class="hint">eXp settled production + company dollar · through ${cM2} ${P.yr}</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} ${P.yr} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD ${P.yr}</th><th class="num">YoY '${yy}</th><th class="num">YoY</th><th class="num">${P.yr-1} total</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px"><span style="background:#22c55e;color:#04220f;padding:1px 6px;border-radius:4px;font-weight:700">green</span> = change ≥ +10%. All figures from the <b>eXp Team report</b> (settled transactions): units are deduped per side, volume is adjusted volume, Company Dollar = team GCI (Bly accounts). <b>Not shown</b> (need other feeds): listings taken, contracts written, pending, referrals, withdrawn, expenses/profit.</div></div>`;
 }
 function felloPanel(keys,filterFn,opts){
@@ -303,9 +308,9 @@ function upcomingPanel(filterFn,opts){
     <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Close</th><th>Property</th><th>Agent</th><th>Source</th><th class="num">List price</th><th class="num">Est. GCI</th><th class="num">Team GCI</th><th class="num">Agent GCI</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="sub" style="margin-top:8px">From the <b>Closings Board</b> (Google Sheet), run through the <b>Bly Team commission calculator</b> (3% rate, tier 3): GCI splits into Zillow referral (40% off top on Zillow Preferred) → team/office cut (SOI 30% / office 45% / Zillow 50% of net) → eXp fees → agent take-home. Deb's own production counts fully to the team. Projected estimates, not settled.</div></div>`;
 }
-function isaTeamScorecard(){
+function isaTeamScorecard(keys){
   if(!DATA.isa)return "";
-  const P=metricPeriods();
+  const P=metricPeriods(keys);
   const agg=keys=>{const o={buyU:0,buyV:0,buyG:0,sellU:0,sellV:0,sellG:0,rentU:0,rentG:0,co:0,inc:0};
     DATA.isaNames.forEach(n=>{const s=isaSum(n,keys);o.buyU+=s.buy_u;o.buyV+=s.buy_v;o.buyG+=s.buy_g;o.sellU+=s.sell_u;o.sellV+=s.sell_v;o.sellG+=s.sell_g;o.rentU+=s.rent_u;o.rentG+=s.rent_g;o.co+=s.co;o.inc+=isaIncome(n,keys);});return o;};
   const A={mtd:agg(P.mtd),lm:agg(P.lm),ytd:agg(P.ytd)};
@@ -325,8 +330,8 @@ function isaTeamScorecard(){
   const body=rows.map(([lbl,fn,ff])=>{const vM=fn(A.mtd),vL=fn(A.lm),vY=fn(A.ytd);
     return `<tr><td>${lbl}</td><td class="num">${ff(vM)}</td><td class="num">${ff(vL)}</td>${chgCell(chg(vM,vL))}<td class="num">${ff(vY)}</td>${na}${na}${na}</tr>`;}).join("");
   const cM2=MN[P.mn], pM=MN[P.mn>1?P.mn-1:12];
-  return `<div class="panel"><h2>ISA team scorecard <span class="hint">ISA-sourced production · same metrics as the main page · through ${cM2} 2026</span></h2>
-    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">YoY</th><th class="num">2025 total</th></tr></thead><tbody>${body}</tbody></table></div>
+  return `<div class="panel"><h2>ISA team scorecard <span class="hint">ISA-sourced production · same metrics as the main page · through ${cM2} ${P.yr}</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${cM2} ${P.yr} MTD</th><th class="num">${pM} (prev)</th><th class="num">MoM</th><th class="num">YTD ${P.yr}</th><th class="num">YoY '${String(P.yr-1).slice(2)}</th><th class="num">YoY</th><th class="num">${P.yr-1} total</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px"><span style="background:#22c55e;color:#04220f;padding:1px 6px;border-radius:4px;font-weight:700">green</span> = change ≥ +10%. ISA-sourced closings (FUB Converted tags → SISU by name/address); CO$ = team GCI on those deals. YoY &amp; 2025 columns are <b>n/a</b> — ISA attribution is 2026-only (FUB keeps each contact's latest deal).</div></div>`;
 }
 function renderOffice(keys,id){
@@ -396,7 +401,7 @@ function renderOffice(keys,id){
   document.getElementById("view").innerHTML=`${prodCards}
     ${splitBox}
     ${upcomingPanel()}
-    ${teamScorecard()}
+    ${teamScorecard(keys)}
     <div class="panel"><h2>Lead pipeline <span class="hint">${scopeLabel()} · leads added in period</span></h2>${circleFunnel(dsAllRows(),keys)}</div>
     <div class="two">
       <div class="panel"><h2>Monthly GCI <span class="hint">2026 vs 2025</span></h2><div class="chartbox"><canvas id="trend"></canvas></div></div>
@@ -563,7 +568,7 @@ function renderISATeam(keys,id){
     <div class="banner" style="margin-top:0">ISA team overview — ${DATA.isaNames.join(", ")}. Cohort follows the period selector (top right). Click a name for their full dashboard.</div>
     ${teamCards}
     <div class="panel"><h2>ISA scorecard <span class="hint">click a column to sort · click a row for detail</span></h2>${table}</div>
-    ${isaTeamScorecard()}
+    ${isaTeamScorecard(keys)}
     ${upcomingPanel(d=>anyIsaSrc(d.src),{title:'ISA team — closings pipeline',label:'ISA-sourced upcoming closings',hideEmpty:true})}
     <div class="panel"><h2>ISA team — lead pipeline <span class="hint">ISA-converted leads · added in period</span></h2>${circleFunnel(DATA.dsAll.leads.filter(L=>L[0]>0),keys)}</div>
     ${analyticsPanelsRows(DATA.dsAll.leads.filter(L=>L[0]>0),keys,'ISA-converted leads')}
@@ -1024,9 +1029,9 @@ function bindAgentPlanner(b){
     $("apL2A").value=Math.round(b.l2a*100);$("apA2M").value=Math.round(b.a2m*100);$("apM2C").value=Math.round(b.m2c*100);$("apGci").value=b.avgGci;recompute();};
   recompute();
 }
-function agentScorecard(name){
+function agentScorecard(name,keys){
   if(!DATA.metrics)return "";
-  const P=metricPeriods();
+  const P=metricPeriods(keys);
   const am=k=>{const p=agentProdSum(name,k);const s=(DATA.agentSide||{})[normName(name)]||{};let bu=0,bv=0,su=0,sv=0;k.forEach(x=>{const m=s[x];if(m){bu+=m.bu||0;bv+=m.bv||0;su+=m.su||0;sv+=m.sv||0;}});return {u:p.u,v:p.v,g:p.g,bu,bv,su,sv,co:expCoSum(name,k)};};
   const A={mtd:am(P.mtd),ytd:am(P.ytd),yoy:am(P.yoy)};
   const T={ytd:metricAgg(P.ytd),yoy:metricAgg(P.yoy)};
@@ -1046,8 +1051,8 @@ function agentScorecard(name){
     return `<tr><td>${lbl}</td><td class="num">${ff(vM)}</td><td class="num">${ff(vY)}</td><td class="num">${ff(vO)}</td>${pctCell(ag)}${pctCell(tg)}${vsCell(ag,tg)}</tr>`;
   }).join("");
   const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `<div class="panel"><h2>${name} — scorecard vs team <span class="hint">${MN[P.mn]} MTD · YTD · YoY growth benchmarked to the whole team</span></h2>
-    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">Agent YoY</th><th class="num">Team YoY</th><th>vs Team</th></tr></thead><tbody>${body}</tbody></table></div>
+  return `<div class="panel"><h2>${name} — scorecard vs team <span class="hint">${MN[P.mn]} ${P.yr} MTD · YTD · YoY growth benchmarked to the whole team</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">${MN[P.mn]} ${P.yr} MTD</th><th class="num">YTD ${P.yr}</th><th class="num">YoY '${String(P.yr-1).slice(2)}</th><th class="num">Agent YoY</th><th class="num">Team YoY</th><th>vs Team</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="sub" style="margin-top:8px"><b>Agent YoY</b> = this agent's YTD-vs-last-year growth; <b>Team YoY</b> = the whole team's. <b>vs Team</b>: <span style="color:#22c55e;font-weight:700">▲ ahead</span> = growing faster than the team, <span style="color:#d81b9a;font-weight:700">▼ behind</span> = slower, ≈ on par within 2pts.</div></div>`;
 }
 function renderAgentDetail(name,keys){
@@ -1110,7 +1115,7 @@ function renderAgentDetail(name,keys){
   const fullView=`
     <div class="sub" style="margin:2px 0 10px">Total production <span style="color:var(--muted)">(all deals, from SISU)</span></div>
     ${prodCards}
-    ${agentScorecard(name)}
+    ${agentScorecard(name,keys)}
     ${upcomingPanel(d=>boardMatch(d.agent,name),{title:name+' — closings pipeline',label:name+"'s upcoming closings",hideEmpty:true})}
     ${hasProd?`<div class="panel"><h2>Monthly production <span class="hint">2026 · all sources</span></h2><div class="chartbox"><canvas id="agProd"></canvas></div></div>`:''}
     <div class="sub" style="margin:20px 0 8px;font-weight:700;color:var(--text)">Performance on ${scopeLabel()}</div>
@@ -1198,9 +1203,18 @@ function toast(m){const t=document.getElementById("toast");t.textContent=m;t.cla
 function buildTabs(){const tabs=[["Office","Office / Team"],["ISATeam","ISA Team"],["Agents","Agent Insights"]];const w=document.getElementById("tabs");
   w.innerHTML=tabs.map(([id,lbl],i)=>`<div class="tab${i===0?' active':''}" data-tab="${id}">${lbl}</div>`).join("");
   w.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{w.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));el.classList.add("active");currentTab=el.dataset.tab;currentAgent=null;currentISA=null;render();});}
+function buildPeriodOptions(){
+  const sel=document.getElementById("periodSel"); if(!sel||!DATA.metrics)return;
+  if(sel.querySelector('optgroup'))return;
+  const ms=Object.keys(DATA.metrics).sort(), last12=ms.slice(-12).reverse();
+  const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const og=document.createElement("optgroup"); og.label="Single month (last 12)";
+  last12.forEach(k=>{const o=document.createElement("option");o.value="m:"+k;o.textContent=MN[+k.slice(5)]+" "+k.slice(0,4);og.appendChild(o);});
+  sel.appendChild(og);
+}
 function start(){
   document.getElementById("foot").innerHTML=`ISA pool = 5% of sourced GCI · closer 2.5% + manager (Kahla) 2.5% override · Kahla keeps 5% on her own deals.<br>Data as of ${DATA.asOf}. Office = SISU non-rental sales; ISA-sourced via FUB Converted tags → SISU by address.`;
-  buildTabs();document.getElementById("periodSel").onchange=render;
+  buildTabs();buildPeriodOptions();document.getElementById("periodSel").onchange=render;
   const xm=document.getElementById("xferModal");
   document.getElementById("xmClose").onclick=()=>xm.classList.add("hide");
   xm.onclick=e=>{if(e.target===xm)xm.classList.add("hide");};
