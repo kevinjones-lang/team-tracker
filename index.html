@@ -985,6 +985,32 @@ function bindAgentPlanner(b){
     $("apL2A").value=Math.round(b.l2a*100);$("apA2M").value=Math.round(b.a2m*100);$("apM2C").value=Math.round(b.m2c*100);$("apGci").value=b.avgGci;recompute();};
   recompute();
 }
+function agentScorecard(name){
+  if(!DATA.metrics)return "";
+  const P=metricPeriods();
+  const am=k=>{const p=agentProdSum(name,k);const s=(DATA.agentSide||{})[normName(name)]||{};let bu=0,bv=0,su=0,sv=0;k.forEach(x=>{const m=s[x];if(m){bu+=m.bu||0;bv+=m.bv||0;su+=m.su||0;sv+=m.sv||0;}});return {u:p.u,v:p.v,g:p.g,bu,bv,su,sv,co:expCoSum(name,k)};};
+  const A={mtd:am(P.mtd),ytd:am(P.ytd),yoy:am(P.yoy)};
+  const T={ytd:metricAgg(P.ytd),yoy:metricAgg(P.yoy)};
+  const chg=(c,p)=>(!p&&p!==0)?null:(p===0?null:(c-p)/Math.abs(p));
+  const pctCell=v=>v===null?'<td class="num sub">—</td>':`<td class="num" style="color:${v>=0?'#4ade80':'#f87171'};font-weight:600">${(v*100).toFixed(1)}%</td>`;
+  const vsCell=(a,t)=>{if(a===null||t===null)return '<td class="sub">—</td>';const d=a-t;const lab=d>0.02?'▲ ahead':d<-0.02?'▼ behind':'≈ on par';const col=d>0.02?'#22c55e':d<-0.02?'#d81b9a':'var(--muted)';return `<td style="font-weight:700;color:${col}">${lab} <span class="sub" style="font-weight:400">${d>=0?'+':''}${(d*100).toFixed(0)}pt</span></td>`;};
+  const rows=[
+    ['Closed units',a=>a.u,t=>t.buyU+t.sellU,fmt],
+    ['Closed volume',a=>a.v,t=>t.buyV+t.sellV,money],
+    ['Total GCI',a=>a.g,t=>t.buyG+t.sellG,money],
+    ['Buyer-side units',a=>a.bu,t=>t.buyU,fmt],
+    ['Listings sold',a=>a.su,t=>t.sellU,fmt],
+    ['Company Dollar (CO$)',a=>a.co,t=>t.co,money],
+  ];
+  const body=rows.map(([lbl,af,tf,ff])=>{
+    const vM=af(A.mtd),vY=af(A.ytd),vO=af(A.yoy),ag=chg(vY,vO),tg=chg(tf(T.ytd),tf(T.yoy));
+    return `<tr><td>${lbl}</td><td class="num">${ff(vM)}</td><td class="num">${ff(vY)}</td><td class="num">${ff(vO)}</td>${pctCell(ag)}${pctCell(tg)}${vsCell(ag,tg)}</tr>`;
+  }).join("");
+  const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `<div class="panel"><h2>${name} — scorecard vs team <span class="hint">${MN[P.mn]} MTD · YTD · YoY growth benchmarked to the whole team</span></h2>
+    <div style="overflow-x:auto"><table><thead><tr><th>Metric</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">YoY '25</th><th class="num">Agent YoY</th><th class="num">Team YoY</th><th>vs Team</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="sub" style="margin-top:8px"><b>Agent YoY</b> = this agent's YTD-vs-last-year growth; <b>Team YoY</b> = the whole team's. <b>vs Team</b>: <span style="color:#22c55e;font-weight:700">▲ ahead</span> = growing faster than the team, <span style="color:#d81b9a;font-weight:700">▼ behind</span> = slower, ≈ on par within 2pts.</div></div>`;
+}
 function renderAgentDetail(name,keys){
   const D=DATA.dsAll;
   const rows=D.leads.filter(L=>(scopeMode==='isa'?L[0]>0:true) && D.agentList[L[4]]===name);
@@ -1045,6 +1071,7 @@ function renderAgentDetail(name,keys){
   const fullView=`
     <div class="sub" style="margin:2px 0 10px">Total production <span style="color:var(--muted)">(all deals, from SISU)</span></div>
     ${prodCards}
+    ${agentScorecard(name)}
     ${hasProd?`<div class="panel"><h2>Monthly production <span class="hint">2026 · all sources</span></h2><div class="chartbox"><canvas id="agProd"></canvas></div></div>`:''}
     <div class="sub" style="margin:20px 0 8px;font-weight:700;color:var(--text)">Performance on ${scopeLabel()}</div>
     ${cards}
