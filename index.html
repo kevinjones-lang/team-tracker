@@ -268,17 +268,22 @@ function leaderboardPanel(keys){
   const sumF=(nm,ks,f)=>{let a=0;ks.forEach(k=>{const x=mon[nm][k];if(x)a+=x[f]||0;});return a;};
   const MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const METR=[['🏠 Closed units','u',fmt],['📈 Closed volume','v',money],['💰 GCI','g',money]];
-  const col=METR.map(([lbl,f,ff])=>{
-    const rows=Object.keys(mon).map(nm=>{const c=sumF(nm,curK,f),pr=sumF(nm,priK,f);
-      return {nm:disp[nm]||nm,c,pr,g:(pr>0&&c>0)?(c-pr)/pr:null};})
-      .filter(r=>r.g!==null).sort((a,b)=>b.g-a.g).slice(0,5);
-    const body=rows.map((r,i)=>`<tr class="lbrow" data-agent="${encodeURIComponent(r.nm)}" style="cursor:pointer">
+  const rowH=(r,i)=>`<tr class="lbrow" data-agent="${encodeURIComponent(r.nm)}" style="cursor:pointer">
       <td class="sub" style="width:18px">${i+1}</td><td>${r.nm} <span class="sub">›</span></td>
       <td class="num" style="color:${r.g>=0?'#4ade80':'#f87171'};font-weight:700">${r.g>=0?'+':''}${(r.g*100).toFixed(0)}%</td>
-      <td class="num sub">${ff(r.c)}<br><span style="opacity:.6">was ${ff(r.pr)}</span></td></tr>`).join("")
+      <td class="num sub">${r.ff(r.c)}<br><span style="opacity:.6">was ${r.ff(r.pr)}</span></td></tr>`;
+  const head=`<thead><tr><th class="sub">#</th><th>Agent</th><th class="num">Growth</th><th class="num">Now / prior</th></tr></thead>`;
+  const col=METR.map(([lbl,f,ff])=>{
+    const all=Object.keys(mon).map(nm=>{const c=sumF(nm,curK,f),pr=sumF(nm,priK,f);
+      return {nm:disp[nm]||nm,c,pr,ff,g:(pr>0&&c>0)?(c-pr)/pr:null};})
+      .filter(r=>r.g!==null).sort((a,b)=>b.g-a.g);
+    const top=all.slice(0,5), rest=all.slice(5);
+    const body=top.map((r,i)=>rowH(r,i)).join("")
       ||`<tr><td colspan="4" class="sub">No agents with prior-year ${lbl.replace(/^[^ ]+ /,'')} to compare.</td></tr>`;
+    const more=rest.length?`<details style="margin-top:8px"><summary style="cursor:pointer;user-select:none;color:var(--accent);font-size:13px">Show all ${all.length} agents (+${rest.length} more)</summary>
+      <table style="margin-top:6px">${head}<tbody>${rest.map((r,i)=>rowH(r,i+5)).join("")}</tbody></table></details>`:'';
     return `<div class="panel" style="margin:0"><h2 style="font-size:15px">${lbl}</h2>
-      <table><thead><tr><th class="sub">#</th><th>Agent</th><th class="num">Growth</th><th class="num">Now / prior</th></tr></thead><tbody>${body}</tbody></table></div>`;
+      <table>${head}<tbody>${body}</tbody></table>${more}</div>`;
   }).join("");
   const basis=lbMode==='mtd'?`${MN[P.mn]} ${P.yr} vs ${MN[P.mn]} ${P.yr-1}`:`YTD ${P.yr} vs YTD ${P.yr-1} (Jan–${MN[P.mn]})`;
   const tog=`<span id="lbTog" class="scopetog" style="margin-left:10px;vertical-align:middle">
@@ -430,6 +435,7 @@ function renderOffice(keys,id){
     ${upcomingPanel()}
     ${teamScorecard(keys)}
     ${leaderboardPanel(keys)}
+    <div class="panel"><h2>Top closing agents <span class="hint">${scopeLabel()} · closed in period · ${fmt(computeAll(keys).closings)}</span></h2>${closingAgentsBlock(computeAll(keys))}</div>
     <div class="panel"><h2>Lead pipeline <span class="hint">${scopeLabel()} · leads added in period</span></h2>${circleFunnel(dsAllRows(),keys)}</div>
     <div class="two">
       <div class="panel"><h2>Monthly GCI <span class="hint">2026 vs 2025</span></h2><div class="chartbox"><canvas id="trend"></canvas></div></div>
@@ -922,9 +928,8 @@ function computeAll(keys){
 function analyticsPanelsAll(keys){
   const A=computeAll(keys), lbl=scopeLabel();
   return `<div class="two">
-    <div class="panel"><h2>Top closing agents <span class="hint">${lbl} · closed in period · ${fmt(A.closings)}</span></h2>${closingAgentsBlock(A)}</div>
-    <div class="panel"><h2>Lead source mix <span class="hint">${lbl} · click a number for the leads</span></h2>${srcBlock(A,true)}</div></div>
-    <div class="panel"><h2>Pipeline by stage <span class="hint">${lbl} · leads added in period · ${fmt(A.cohort)}</span></h2>${stageBlock(A)}</div>`;
+    <div class="panel"><h2>Lead source mix <span class="hint">${lbl} · click a number for the leads</span></h2>${srcBlock(A,true)}</div>
+    <div class="panel"><h2>Pipeline by stage <span class="hint">${lbl} · leads added in period · ${fmt(A.cohort)}</span></h2>${stageBlock(A)}</div></div>`;
 }
 /* ===== reusable: source-mix popup + filtered analytics for sub-pages ===== */
 function bindSrcPopup(keys,pred){
