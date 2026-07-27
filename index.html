@@ -188,7 +188,7 @@ let currentAgent=null;
 let currentISA=null;   // drilldown within the ISA Team tab
 let agentView="full";  // 'full' (detailed rows) or 'cards' (icon metrics)
 let dispMode="pct";    // 'pct' (percentages) or 'num' (exact numbers/$)
-let boardMonth=false;  // Closings pipeline board: false=All, true=this month only
+let boardSel="all";    // Closings pipeline board month filter: 'all' or month number as string
 let isaSort={key:'inc',dir:-1};      // ISA Team scorecard sort state
 let agentSort={key:'closed',dir:-1}; // Agent Insights scorecard sort state
 /* sortable-table helpers */
@@ -259,15 +259,18 @@ function upcomingPanel(){
   const cur=(DATA.metrics?metricPeriods().mn:new Date().getMonth()+1);
   const MN=["","January","February","March","April","May","June","July","August","September","October","November","December"];
   const dmonth=s=>{const m=/(\d{1,2})\/\d{1,2}/.exec(s||'');return m?+m[1]:null;};
-  const deals=boardMonth?U.deals.filter(d=>dmonth(d.d)===cur):U.deals;
+  const months=[...new Set(U.deals.map(d=>dmonth(d.d)).filter(Boolean))].sort((a,b)=>a-b);
+  const deals=boardSel==='all'?U.deals:U.deals.filter(d=>dmonth(d.d)===+boardSel);
   const withP=deals.filter(d=>d.price>0);
   const totGci=deals.reduce((a,d)=>a+d.gci,0), totVol=withP.reduce((a,d)=>a+d.price,0),
         totTeam=deals.reduce((a,d)=>a+(d.teamGci||0),0), totAgent=deals.reduce((a,d)=>a+(d.agentGci||0),0);
   const rows=deals.map(d=>`<tr><td>${d.d||'—'}</td><td>${d.addr}</td><td>${d.agent}</td><td class="sub">${d.src||''}</td>
-    <td class="num">${d.price?money(d.price):'—'}</td><td class="num">${d.gci?money(d.gci):'—'}</td><td class="num" style="color:var(--good)">${d.teamGci?money(d.teamGci):'—'}</td><td class="num">${d.agentGci!=null?money(d.agentGci):'—'}</td></tr>`).join("")||`<tr><td colspan="8" class="sub">No closings scheduled for ${MN[cur]}.</td></tr>`;
-  const scope=boardMonth?`${MN[cur]} closings`:U.label;
+    <td class="num">${d.price?money(d.price):'—'}</td><td class="num">${d.gci?money(d.gci):'—'}</td><td class="num" style="color:var(--good)">${d.teamGci?money(d.teamGci):'—'}</td><td class="num">${d.agentGci!=null?money(d.agentGci):'—'}</td></tr>`).join("")||`<tr><td colspan="8" class="sub">No closings scheduled for ${MN[+boardSel]||''}.</td></tr>`;
+  const scope=boardSel==='all'?U.label:`${MN[+boardSel]} closings`;
+  const monthOpts=`<option value="all"${boardSel==='all'?' selected':''}>All months (${U.deals.length})</option>`+
+    months.map(m=>`<option value="${m}"${+boardSel===m?' selected':''}>${MN[m]} 2026 (${U.deals.filter(d=>dmonth(d.d)===m).length})</option>`).join("");
   return `<div class="panel"><h2>📋 Closings pipeline board
-      <span id="boardTog" class="scopetog" style="margin-left:10px;vertical-align:middle"><button data-bm="all"${!boardMonth?' class="on"':''}>All (${U.deals.length})</button><button data-bm="month"${boardMonth?' class="on"':''}>This month (${U.deals.filter(d=>dmonth(d.d)===cur).length})</button></span></h2>
+      <select id="boardSelMonth" class="periodSel" style="margin-left:10px;vertical-align:middle;font-size:13px;padding:5px 9px">${monthOpts}</select></h2>
     ${cardsHTML([
       {label:"Projected closings",value:fmt(deals.length),sub:scope},
       {label:"Est. GCI (gross)",value:money(totGci),sub:"3% of price"},
@@ -386,7 +389,7 @@ function renderOffice(keys,id){
   drawSourceTrend();
   drawCoTrend();
   drawExpTrend();
-  document.querySelectorAll("#boardTog button").forEach(b=>b.onclick=()=>{boardMonth=b.dataset.bm==='month';render();});
+  const bsm=document.getElementById("boardSelMonth");if(bsm)bsm.onchange=e=>{boardSel=e.target.value;render();};
 }
 /* ===== SISU-style circle funnel (from FUB lead pipeline) ===== */
 function funnelCounts(rows,keys){
