@@ -331,10 +331,13 @@ function renderOffice(keys,id){
   let contrib="", dough="";
   if(isSales2026){
     const P=dispMode==='pct';
+    const isaTotG=dG+dRentG;
     const cCards=cardsHTML([
       {label:"ISA dept of closings",value:P?pct(safe(dU,off.units)):fmt(dU),sub:P?`${fmt(dU)} of ${fmt(off.units)} office`:`${pct(safe(dU,off.units))} of office`},
       {label:"ISA dept of volume",value:P?pct(safe(dV,off.volume)):money(dV),sub:P?`${money(dV)} of ${money(off.volume)}`:`${pct(safe(dV,off.volume))} of office`},
       {label:"ISA dept of GCI",value:P?pct(safe(dG,off.gci)):money(dG),sub:P?`${money(dG)} of ${money(off.gci)}`:`${pct(safe(dG,off.gci))} of office`},
+      {label:"ISA total GCI",value:money(isaTotG),sub:`sales + leases · ${pct(safe(isaTotG,off.gci))} of office`},
+      {label:"🏢 Office GCI",value:money(off.gci),sub:"whole office (period)"},
       {label:"ISA lease deals",value:fmt(dRentU),sub:`${money(dRentG)} GCI (extra)`},
     ]);
     let rows="";
